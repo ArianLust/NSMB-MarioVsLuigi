@@ -1,245 +1,210 @@
-﻿using NSMB.Networking;
-using NSMB.Quantum;
-using NSMB.UI.Loading;
-using NSMB.UI.MainMenu;
-using NSMB.UI.MainMenu.Submenus.Replays;
-using NSMB.UI.Options;
-using NSMB.UI.Translation;
-using NSMB.Utilities.Extensions;
-using Quantum;
-using System;
+﻿using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.Audio;
 using UnityEngine.InputSystem;
-using UnityEngine.Profiling;
+using UnityEngine.SceneManagement;
 using UnityEngine.Rendering.Universal;
-using UnityEngine.UI;
 
-namespace NSMB {
-    public class GlobalController : Singleton<GlobalController> {
+using Fusion;
+using NSMB.Extensions;
+using NSMB.Loading;
+using NSMB.Translation;
+using NSMB.UI.Pause.Options;
 
-        //---Events
-        public static event Action ResolutionChanged;
+public class GlobalController : Singleton<GlobalController> {
 
-        //---Public Variables
-        public TranslationManager translationManager;
-        public DiscordController discordController;
-        public RumbleManager rumbleManager;
-        public Gradient rainbowGradient;
-        public Sprite[] pingIndicators;
-        public SimulationConfig config;
+    //---Events
+    public event Action<RenderTexture> RenderTextureChanged;
 
-        public PauseOptionMenuManager optionsManager;
+    //---Public Variables
+    public TranslationManager translationManager;
+    public DiscordController discordController;
+    public RumbleManager rumbleManager;
+    public Gradient rainbowGradient;
 
-        public ScriptableRendererFeature outlineFeature;
-        public GameObject graphy, connecting;
-        public LoadingCanvas loadingCanvas;
-        public Image fullscreenFadeImage;
-        public AudioSource sfx;
+    public PauseOptionMenuManager optionsManager;
 
-        [NonSerialized] public bool checkedForVersion = false, firstConnection = true;
-        [NonSerialized] public int windowWidth = 1280, windowHeight = 720;
+    public ScriptableRendererFeature outlineFeature;
+    public GameObject ndsCanvas, fourByThreeImage, anyAspectImage, graphy, connecting, fusionStatsTemplate;
+    public LoadingCanvas loadingCanvas;
 
-        //---Serialized Variables
-        [SerializeField] private AudioMixer mixer;
+    public RectTransform ndsRect;
 
-        //---Private Variables
-        private Coroutine fadeMusicRoutine, fadeSfxRoutine, totalFadeRoutine;
-#if IDLE_LOCK_30FPS
-        private int previousVsyncCount, previousFrameRate;
-#endif
+    public RenderTexture ndsTexture;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        public static void CreateInstance() {
-            Instantiate(Resources.Load("Prefabs/Static/GlobalController"));
+    public bool checkedForVersion = false, firstConnection = true;
+    public int windowWidth = 1280, windowHeight = 720;
+
+    public ConnectionToken connectionToken;
+
+    //---Serialized Variables
+    [SerializeField] private AudioMixer mixer;
+    [SerializeField] private AudioSource sfx;
+
+    //---Private Variables
+    private Coroutine fadeMusicRoutine;
+    private Coroutine fadeSfxRoutine;
+    private GameObject fusionStats;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    public static void CreateInstance() {
+        Instantiate(Resources.Load("Prefabs/Static/GlobalController"));
+    }
+
+    public void OnValidate() {
+        if (!discordController) discordController = GetComponent<DiscordController>();
+    }
+
+    public void Awake() {
+        Set(this);
+
+        firstConnection = true;
+        checkedForVersion = false;
+    }
+
+    public void Start() {
+        AuthenticationHandler.IsAuthenticating = false;
+        NetworkHandler.connecting = 0;
+
+        if (!Application.isFocused) {
+            if (Settings.Instance.audioMuteMusicOnUnfocus) mixer.SetFloat("MusicVolume", -80f);
+            if (Settings.Instance.audioMuteSFXOnUnfocus) mixer.SetFloat("SoundVolume", -80f);
         }
+        ControlSystem.controls.Enable();
+        ControlSystem.controls.Debug.FPSMonitor.performed += ToggleFpsMonitor;
 
-        public void OnValidate() {
-            this.SetIfNull(ref discordController);
-        }
+        NetworkHandler.OnShutdown += OnShutdown;
+        NetworkHandler.OnHostMigration += OnHostMigration;
 
-        public void Awake() {
-            Set(this);
+        CreateFusionStatsInstance();
+    }
 
-            firstConnection = true;
-            checkedForVersion = false;
-        }
+    public void OnDestroy() {
+        ControlSystem.controls.Debug.FPSMonitor.performed -= ToggleFpsMonitor;
+        ControlSystem.controls.Disable();
 
-        public void Start() {
-            AuthenticationHandler.IsAuthenticating = false;
+        NetworkHandler.OnShutdown -= OnShutdown;
+        NetworkHandler.OnHostMigration -= OnHostMigration;
+    }
 
-            if (!Application.isFocused) {
-                if (Settings.Instance.audioMuteMusicOnUnfocus) {
-                    mixer.SetFloat("MusicVolume", -80f);
-                }
+    public void Update() {
+        int windowWidth = Screen.width;
+        int windowHeight = Screen.height;
 
-                if (Settings.Instance.audioMuteSFXOnUnfocus) {
-                    mixer.SetFloat("SoundVolume", -80f);
-                }
+        if (Settings.Instance.graphicsNdsEnabled && SceneManager.GetActiveScene().buildIndex != 0) {
+
+            int targetHeight = 224;
+            int targetWidth = Mathf.CeilToInt(targetHeight * (Settings.Instance.graphicsNdsForceAspect ? (4/3f) : (float) windowWidth / windowHeight));
+
+            if (!ndsTexture || ndsTexture.width != targetWidth || ndsTexture.height != targetHeight) {
+                if (ndsTexture)
+                    ndsTexture.Release();
+
+                ndsTexture = RenderTexture.GetTemporary(targetWidth, targetHeight);
+                ndsTexture.filterMode = FilterMode.Point;
+                ndsTexture.graphicsFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.B10G11R11_UFloatPack32;
+                RenderTextureChanged?.Invoke(ndsTexture);
             }
-            Settings.Controls.Enable();
-            Settings.Controls.Debug.FPSMonitor.performed += ToggleFpsMonitor;
-            QuantumEvent.Subscribe<EventStartGameEndFade>(this, OnStartGameEndFade);
-            QuantumCallback.Subscribe<CallbackUnitySceneLoadDone>(this, OnUnitySceneLoadDone);
-            loadingCanvas.Startup();
+            ndsCanvas.SetActive(true);
+        } else {
+            ndsCanvas.SetActive(false);
         }
 
-        public void OnDestroy() {
-            Settings.Controls.Debug.FPSMonitor.performed -= ToggleFpsMonitor;
-            Settings.Controls.Disable();
-        }
-
-        public void Update() {
-            int newWindowWidth = Screen.width;
-            int newWindowHeight = Screen.height;
-
-            //todo: this jitters to hell
+        //todo: this jitters to hell
 #if UNITY_STANDALONE
-            if (Screen.fullScreenMode == FullScreenMode.Windowed && UnityEngine.Input.GetKey(KeyCode.LeftShift) && (windowWidth != newWindowWidth || windowHeight != newWindowHeight)) {
-                newWindowHeight = (int) (newWindowWidth * (9f / 16f));
-                Screen.SetResolution(newWindowWidth, newWindowHeight, FullScreenMode.Windowed);
-            }
+        if (Screen.fullScreenMode == FullScreenMode.Windowed && Keyboard.current[Key.LeftShift].isPressed && (this.windowWidth != windowWidth || this.windowHeight != windowHeight)) {
+            windowHeight = (int) (windowWidth * (9f / 16f));
+            Screen.SetResolution(windowWidth, windowHeight, FullScreenMode.Windowed);
+        }
+        this.windowWidth = windowWidth;
+        this.windowHeight = windowHeight;
+#endif
+    }
 
-            if (Debug.isDebugBuild) {
-                if (UnityEngine.Input.GetKeyDown(KeyCode.F9)) {
-                    if (Profiler.enabled) {
-                        Profiler.enabled = false;
-                        PlaySound(SoundEffect.Player_Sound_Powerdown);
-                    } else {
-                        Profiler.maxUsedMemory = 256 * 1024 * 1024;
-                        Profiler.logFile = "profile-" + DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                        Profiler.enableBinaryLog = true;
-                        Profiler.enabled = true;
-                        PlaySound(SoundEffect.Player_Sound_PowerupCollect);
-                    }
-                }
-
-                if (UnityEngine.Input.GetKeyDown(KeyCode.Alpha9)) {
-                    var canvas = FindFirstObjectByType<MainMenuCanvas>();
-                    if (canvas) {
-                        var blur = canvas.transform.Find("MainMenu").Find("Blur").gameObject;
-                        blur.SetActive(!blur.activeSelf);
-                    }
-                }
-
-            }
-
-            if (UnityEngine.Input.GetKeyDown(KeyCode.F6)) {
-                System.Diagnostics.Process.Start(Application.consoleLogPath);
-            }
-
-            if (UnityEngine.Input.GetKeyDown(KeyCode.F7)) {
-                System.Diagnostics.Process.Start(ReplayListManager.ReplayDirectory);
-            }
+#if UNITY_WEBGL
+    int previousVsyncCount;
+    int previousFrameRate;
 #endif
 
-            if (windowWidth != newWindowWidth || windowHeight != newWindowHeight) {
-                windowWidth = newWindowWidth;
-                windowHeight = newWindowHeight;
-                ResolutionChanged?.Invoke();
-            }
+    public void OnApplicationFocus(bool focus) {
+        if (focus) {
+            Settings.Instance.ApplyVolumeSettings();
+            StopCoroutineNullable(ref fadeMusicRoutine);
+            StopCoroutineNullable(ref fadeSfxRoutine);
 
-            if ((int) (Time.unscaledTime + Time.unscaledDeltaTime) > (int) Time.unscaledTime) {
-                // Update discord every second
-                discordController.UpdateActivity();
-            }
-        }
+#if UNITY_WEBGL
+            // Lock framerate when losing focus to (hopefully) disable browsers slowing the game
+            previousVsyncCount = QualitySettings.vSyncCount;
+            previousFrameRate = Application.targetFrameRate;
 
-        public void OnApplicationFocus(bool focus) {
-            if (focus) {
-                Settings.Instance.ApplyVolumeSettings();
-                this.StopCoroutineNullable(ref fadeMusicRoutine);
-                this.StopCoroutineNullable(ref fadeSfxRoutine);
-
-#if IDLE_LOCK_30FPS
-                QualitySettings.vSyncCount = previousVsyncCount;
-                Application.targetFrameRate = previousFrameRate;
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = 30;
 #endif
-            } else {
-                if (Settings.Instance.audioMuteMusicOnUnfocus) {
-                    fadeMusicRoutine ??= StartCoroutine(FadeVolume("MusicVolume"));
-                }
 
-                if (Settings.Instance.audioMuteSFXOnUnfocus) {
-                    fadeSfxRoutine ??= StartCoroutine(FadeVolume("SoundVolume"));
-                }
+        } else {
+            if (Settings.Instance.audioMuteMusicOnUnfocus)
+                fadeMusicRoutine ??= StartCoroutine(FadeVolume("MusicVolume"));
+            if (Settings.Instance.audioMuteSFXOnUnfocus)
+                fadeSfxRoutine ??= StartCoroutine(FadeVolume("SoundVolume"));
 
-#if IDLE_LOCK_30FPS
-                // Lock framerate when losing focus to (hopefully) disable browsers slowing the game
-                previousVsyncCount = QualitySettings.vSyncCount;
-                previousFrameRate = Application.targetFrameRate;
-
-                QualitySettings.vSyncCount = 0;
-                Application.targetFrameRate = 30;
+#if UNITY_WEBGL
+            QualitySettings.vSyncCount = previousVsyncCount;
+            Application.targetFrameRate = previousFrameRate;
 #endif
-            }
         }
+    }
 
-        public void OnUnitySceneLoadDone(CallbackUnitySceneLoadDone e) {
-            if (e.SceneName != null) {
-                foreach (int localPlayer in e.Game.GetLocalPlayerSlots()) {
-                    e.Game.SendCommand(localPlayer, new CommandPlayerLoaded());
-                }
-            }
+    private void StopCoroutineNullable(ref Coroutine coroutine) {
+        if (coroutine == null)
+            return;
 
-            discordController.UpdateActivity();
-            this.StopCoroutineNullable(ref totalFadeRoutine);
-            mixer.SetFloat("OverrideVolume", 0f);
-            StartCoroutine(FadeFullscreenImage(0, 1/3f, 0.1f));
+        StopCoroutine(coroutine);
+        coroutine = null;
+    }
+
+    private IEnumerator FadeVolume(string key) {
+        mixer.GetFloat(key, out float currentVolume);
+        currentVolume = ToLinearScale(currentVolume);
+        float fadeRate = currentVolume * 2f;
+
+        while (currentVolume > 0f) {
+            currentVolume -= fadeRate * Time.deltaTime;
+            mixer.SetFloat(key, ToLogScale(currentVolume));
+            yield return null;
         }
+        mixer.SetFloat(key, -80f);
+    }
 
-        private IEnumerator FadeVolume(string key) {
-            mixer.GetFloat(key, out float currentVolume);
-            currentVolume = ToLinearScale(currentVolume);
-            float fadeRate = currentVolume * 2f;
+    public void PlaySound(Enums.Sounds sound) {
+        sfx.PlayOneShot(sound);
+    }
 
-            while (currentVolume > 0f) {
-                currentVolume -= fadeRate * Time.fixedDeltaTime;
-                mixer.SetFloat(key, ToLogScale(currentVolume));
-                yield return null;
-            }
-            mixer.SetFloat(key, -80f);
-        }
+    private static float ToLinearScale(float x) {
+        return Mathf.Pow(10, x / 20);
+    }
 
-        public void PlaySound(SoundEffect soundEffect) {
-            sfx.PlayOneShot(soundEffect);
-        }
+    private static float ToLogScale(float x) {
+        return 20 * Mathf.Log10(x);
+    }
 
-        private IEnumerator FadeFullscreenImage(float target, float fadeDuration, float delay = 0) {
-            float original = fullscreenFadeImage.color.a;
-            float timer = fadeDuration;
-            if (delay > 0) {
-                yield return new WaitForSeconds(delay);
-            }
+    private void CreateFusionStatsInstance() {
+        if (fusionStats)
+            DestroyImmediate(fusionStats);
 
-            Color color = fullscreenFadeImage.color;
-            while (timer > 0) {
-                timer -= Time.deltaTime;
-                color.a = Mathf.Lerp(original, target, 1 - (timer / fadeDuration));
-                fullscreenFadeImage.color = color;
-                yield return null;
-            }
-        }
+        fusionStats = Instantiate(fusionStatsTemplate, fusionStatsTemplate.transform.parent);
+        fusionStats.SetActive(true);
+    }
 
-        private void OnStartGameEndFade(EventStartGameEndFade e) {
-            if (MvLSceneLoader.Instance.CurrentLoadedMap != null) {
-                // In a game scene
-                StartCoroutine(FadeFullscreenImage(1, 1/3f));
-                totalFadeRoutine = StartCoroutine(FadeVolume("OverrideVolume"));
-            }
-        }
+    private void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) {
+        CreateFusionStatsInstance();
+    }
 
-        private void ToggleFpsMonitor(InputAction.CallbackContext obj) {
-            graphy.SetActive(!graphy.activeSelf);
-        }
+    private void OnHostMigration(NetworkRunner runner, HostMigrationToken token) {
+        CreateFusionStatsInstance();
+    }
 
-        private static float ToLinearScale(float x) {
-            return Mathf.Pow(10, x / 20);
-        }
-
-        private static float ToLogScale(float x) {
-            return 20 * Mathf.Log10(x);
-        }
+    private void ToggleFpsMonitor(InputAction.CallbackContext obj) {
+        graphy.SetActive(!graphy.activeSelf);
     }
 }

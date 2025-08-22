@@ -1,4 +1,4 @@
-#if UNITY_WEBGL || WEBSOCKET || WEBSOCKET_PROXYCONFIG
+﻿#if UNITY_WEBGL || WEBSOCKET || WEBSOCKET_PROXYCONFIG
 
 // --------------------------------------------------------------------------------------------------------------------
 // <summary>
@@ -8,10 +8,11 @@
 // --------------------------------------------------------------------------------------------------------------------
 
 
-namespace Photon.Client
+namespace ExitGames.Client.Photon
 {
     using System;
     using System.Text;
+    using ExitGames.Client.Photon;
 
     #if UNITY_WEBGL && !UNITY_EDITOR
     using System.Runtime.InteropServices;
@@ -30,7 +31,7 @@ namespace Photon.Client
         /// <summary>Photon uses this to agree on a serialization protocol. Either: GpBinaryV16 or GpBinaryV18. Based on enum SerializationProtocol.</summary>
         private string protocols = "GpBinaryV16";
 
-        public Action<LogLevel, string> DebugReturn { get; set; }
+        public Action<DebugLevel, string> DebugReturn { get; set; }
 
         public WebSocket(Uri url, string proxyAddress, string protocols = null)
         {
@@ -154,17 +155,17 @@ namespace Photon.Client
                                       {
                                           case WebSocketSharp.LogLevel.Trace:
                                           case WebSocketSharp.LogLevel.Debug:
-                                              DebugReturn(LogLevel.Debug, s);
+                                              DebugReturn(DebugLevel.ALL, s);
                                               break;
                                           case WebSocketSharp.LogLevel.Info:
-                                              DebugReturn(LogLevel.Info, s);
+                                              DebugReturn(DebugLevel.INFO, s);
                                               break;
                                           case WebSocketSharp.LogLevel.Warn:
-                                              DebugReturn(LogLevel.Warning, s);
+                                              DebugReturn(DebugLevel.WARNING, s);
                                               break;
                                           case WebSocketSharp.LogLevel.Error:
                                           case WebSocketSharp.LogLevel.Fatal:
-                                              DebugReturn(LogLevel.Error, s);
+                                              DebugReturn(DebugLevel.ERROR, s);
                                               break;
                                       }
                                   };

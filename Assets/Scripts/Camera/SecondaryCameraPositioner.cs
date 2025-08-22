@@ -1,52 +1,41 @@
-using NSMB.Quantum;
-using NSMB.Utilities.Extensions;
-using Quantum;
 using UnityEngine;
 
-namespace NSMB.Cameras {
-    public class SecondaryCameraPositioner : QuantumSceneViewComponent<StageContext> {
+using NSMB.Game;
 
-        //---Serialized Variables
-        [SerializeField] private Camera mainCamera;
-        [SerializeField] private Camera ourCamera;
-        [SerializeField] private UnityEngine.LayerMask alwaysIgnoreMask;
-        [SerializeField] private bool copyPropertiesOnly;
+public class SecondaryCameraPositioner : MonoBehaviour {
 
-        //---Private Variables
-        private bool destroyed;
+    //---Serialized Variables
+    [SerializeField] private Camera mainCamera;
+    [SerializeField] private Camera secondaryCamera;
 
-        public void OnValidate() {
-            this.SetIfNull(ref ourCamera);
+    //---Private Variables
+    private bool destroyed;
+
+    public void OnValidate() {
+        if (!secondaryCamera) secondaryCamera = GetComponent<Camera>();
+    }
+
+    public void UpdatePosition() {
+        if (!GameManager.Instance || destroyed)
+            return;
+
+        GameManager gm = GameManager.Instance;
+
+        if (!gm.loopingLevel) {
+            Destroy(gameObject);
+            destroyed = true;
+            return;
         }
 
-        public void UpdatePosition() {
-            if (!copyPropertiesOnly) {
-                if (destroyed) {
-                    return;
-                }
+        bool enable =
+            mainCamera.transform.position.x > gm.LevelMinX - 1 && mainCamera.transform.position.x < gm.LevelMinX + 7
+            || mainCamera.transform.position.x < gm.LevelMaxX + 1 && mainCamera.transform.position.x > gm.LevelMaxX - 7;
 
-                VersusStageData stage = ViewContext.Stage;
+        secondaryCamera.enabled = enable;
 
-                if (!stage.IsWrappingLevel) {
-                    Destroy(gameObject);
-                    destroyed = true;
-                    return;
-                }
-
-                float camX = mainCamera.transform.position.x;
-                bool enable = Mathf.Abs(camX - stage.StageWorldMin.X.AsFloat) < (mainCamera.orthographicSize * mainCamera.aspect) || Mathf.Abs(camX - stage.StageWorldMax.X.AsFloat) < (mainCamera.orthographicSize * mainCamera.aspect);
-
-                ourCamera.enabled = enable;
-
-                if (enable) {
-                    float middle = stage.StageWorldMin.X.AsFloat + stage.TileDimensions.X * 0.25f;
-                    bool rightHalf = mainCamera.transform.position.x > middle;
-                    transform.localPosition = new(stage.TileDimensions.X * (rightHalf ? -1 : 1) * 0.5f, 0, 0);
-                }
-            }
-
-            ourCamera.orthographicSize = mainCamera.orthographicSize;
-            ourCamera.cullingMask = mainCamera.cullingMask & ~alwaysIgnoreMask;
+        if (enable) {
+            bool rightHalf = mainCamera.transform.position.x > gm.LevelMiddleX;
+            transform.localPosition = new(gm.levelWidthTile * (rightHalf ? -1 : 1), 0, 0);
         }
     }
 }

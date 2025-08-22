@@ -1,43 +1,65 @@
-using Newtonsoft.Json.Linq;
 using System;
+using System.IO;
+using System.Net;
 using UnityEngine;
-using UnityEngine.Networking;
+using Newtonsoft.Json.Linq;
 
-namespace NSMB.Networking {
-    public class UpdateChecker {
+public class UpdateChecker {
 
-        private static readonly string ApiURL = "https://api.github.com/repos/ipodtouch0218/NSMB-MarioVsLuigi/releases/latest";
+    private static readonly string ApiURL = "http://api.github.com/repos/ipodtouch0218/NSMB-MarioVsLuigi/releases/latest";
 
-        /// <summary>
-        /// Returns if we're up to date, OR newer, compared to the latest GitHub release version number
-        /// </summary>
-        public async static void IsUpToDate(Action<bool, string> callback) {
-            // Get http results from the GitHub API
-            using UnityWebRequest request = UnityWebRequest.Get(ApiURL);
-            request.SetRequestHeader("Accept", "application/json");
-            request.SetRequestHeader("UserAgent", "ipodtouch0218/NSMB-MarioVsLuigi");
+    /// <summary>
+    /// Returns if we're up to date, OR newer, compared to the latest GitHub release version number
+    /// </summary>
+    public async static void IsUpToDate(Action<bool, string> callback) {
 
-            await request.SendWebRequest();
-            
-            if (request.responseCode != 200) {
-                Debug.Log($"[Updater] Failed to connect to the GitHub API: {request.responseCode}");
-                return;
+        // Get http results from the GitHub API
+        HttpWebRequest request = (HttpWebRequest) WebRequest.Create(ApiURL);
+        request.Accept = "application/json";
+        request.UserAgent = "ipodtouch0218/NSMB-MarioVsLuigi";
+
+        HttpWebResponse response = (HttpWebResponse) await request.GetResponseAsync();
+
+        if (response.StatusCode != HttpStatusCode.OK) {
+            Debug.Log($"[Updater] Failed to connect to the GitHub API: {response.StatusCode}: {response.StatusDescription}");
+            return;
+        }
+
+        try {
+            // Parse the latest release version number
+            string json = new StreamReader(response.GetResponseStream()).ReadToEnd();
+            JObject data = JObject.Parse(json);
+
+            string tag = data.Value<string>("tag_name");
+            if (tag.StartsWith("v"))
+                tag = tag[1..];
+
+            string[] splitTag = tag.Split(".");
+
+            string ver = Application.version;
+            if (ver.StartsWith("v"))
+                ver = ver[1..];
+
+            string[] splitVer = Application.version.Split(".");
+
+            Debug.Log($"[Updater] Local version: {Application.version} / Remote version: {tag}");
+
+            // Check if we're a higher version
+            bool upToDate = true;
+            for (int i = 0; i < 4; i++) {
+                int.TryParse(splitTag[i], out int remote);
+                int.TryParse(splitVer[i], out int local);
+
+                if (local > remote)
+                    break;
+                if (local == remote)
+                    continue;
+
+                upToDate = false;
+                break;
             }
 
-            try {
-                // Parse the latest release version number
-                string json = request.downloadHandler.text;
-                JObject data = JObject.Parse(json);
-
-                string tag = data.Value<string>("tag_name");
-                GameVersion remoteVersion = GameVersion.Parse(tag);
-                GameVersion localVersion = GameVersion.Parse(Application.version);
-
-                bool upToDate = localVersion >= remoteVersion;
-                Debug.Log($"[Updater] Local version: {localVersion} / Remote version: {remoteVersion}. Up to date: {upToDate}");
-
-                callback(upToDate, tag);
-            } catch { }
-        }
+            callback(upToDate, tag);
+        } catch { }
     }
 }
