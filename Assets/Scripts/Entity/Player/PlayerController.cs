@@ -103,7 +103,6 @@ namespace NSMB.Entities.Player {
         //Swimming
         [Networked] public NetworkBool SwimJump { get; set; }
         [Networked] public float SwimLeaveForceHoldJumpTime { get; set; }
-        [Networked] public NetworkBool IsSwimming { get; set; }
         [Networked] public NetworkBool IsWaterWalking { get; set; }
         //-Death & Respawning
         [Networked] public NetworkBool Disconnected { get; set; }
@@ -154,18 +153,19 @@ namespace NSMB.Entities.Player {
         public bool IsStarmanInvincible => StarmanTimer.IsActive(Runner);
         public bool IsDamageable => !IsStarmanInvincible && DamageInvincibilityTimer.ExpiredOrNotRunning(Runner);
         public int PlayerId => Data.PlayerId;
-        public bool CanPickupItem => !FrozenCube && State != Enums.PowerupState.MiniMushroom && !IsSkidding && !IsTurnaround && !HeldEntity && PreviousInputs.buttons.IsSet(PlayerControls.Sprint) && !IsPropellerFlying && !IsSpinnerFlying && !IsCrouching && !IsDead && !WallSlideLeft && !WallSlideRight && JumpState < PlayerJumpState.DoubleJump && !IsGroundpounding && !(!HeldEntity && IsSwimming && PreviousInputs.buttons.IsSet(PlayerControls.Jump));
+        public bool CanPickupItem => !FrozenCube && State != Enums.PowerupState.MiniMushroom && !IsSkidding && !IsTurnaround && !HeldEntity && PreviousInputs.Buttons.IsSet(PlayerControls.Sprint) && !IsPropellerFlying && !IsSpinnerFlying && !IsCrouching && !IsDead && !WallSlideLeft && !WallSlideRight && JumpState < PlayerJumpState.DoubleJump && !IsGroundpounding && !(!HeldEntity && InWater && PreviousInputs.Buttons.IsSet(PlayerControls.Jump));
         public bool HasGroundpoundHitbox => (IsDrilling || (IsGroundpounding && GroundpoundStartTimer.ExpiredOrNotRunning(Runner))) && (!IsOnGround || (Runner.SimulationTime - TimeGrounded < 0.15f));
         public float RunningMaxSpeed => SPEED_STAGE_MAX[RUN_STAGE];
         public float WalkingMaxSpeed => SPEED_STAGE_MAX[WALK_STAGE];
         public BoxCollider2D MainHitbox => hitboxes[0];
         public Vector2 WorldHitboxSize => MainHitbox.size * transform.lossyScale;
+        public override float Height => WorldHitboxSize.y;
         public Vector3 Spawnpoint => GameManager.Instance.GetSpawnpoint(Data.SpawnpointId);
         private int MovementStage {
             get {
                 float xVel = Mathf.Abs(body.Velocity.x) - 0.01f;
                 float[] arr;
-                if (IsSwimming) {
+                if (InWater) {
                     if (IsOnGround) {
                         if (State == Enums.PowerupState.BlueShell) {
                             arr = SWIM_WALK_SHELL_STAGE_MAX;
@@ -192,7 +192,7 @@ namespace NSMB.Entities.Player {
         private int GravityStage {
             get {
                 float yVel = body.Velocity.y;
-                float?[] arr = IsSwimming ? GRAVITY_SWIM_MAX : (State == Enums.PowerupState.MegaMushroom ? GRAVITY_MEGA_MAX : (State == Enums.PowerupState.MiniMushroom ? GRAVITY_MINI_MAX : GRAVITY_STAGE_MAX));
+                float?[] arr = InWater ? GRAVITY_SWIM_MAX : (State == Enums.PowerupState.MegaMushroom ? GRAVITY_MEGA_MAX : (State == Enums.PowerupState.MiniMushroom ? GRAVITY_MINI_MAX : GRAVITY_STAGE_MAX));
                 for (int i = 1; i < arr.Length; i++) {
                     if (yVel >= arr[i]) {
                         return i - 1;
@@ -221,7 +221,7 @@ namespace NSMB.Entities.Player {
 
         //---Serialized Variables
         [SerializeField] private Vector2 smallFrozenCubeSize, largeFrozenCubeSize;
-        [SerializeField] public float flyingGravity = 0.8f, flyingTerminalVelocity = 1.25f, drillVelocity = 7f, groundpoundTime = 0.25f, groundpoundVelocity = 10, blinkingSpeed = 0.25f, terminalVelocity = -7f, launchVelocity = 12f, wallslideSpeed = -4.25f, soundRange = 10f, slopeSlidingAngle = 12.5f, pickupTime = 0.5f;
+        [SerializeField] public float flyingGravity = 0.8f, flyingTerminalVelocity = 1.25f, drillVelocity = 7f, groundpoundTime = 0.25f, groundpoundVelocity = 10, blinkingSpeed = 0.25f, terminalVelocity = -7f, launchVelocity = 12f, wallslideSpeed = -4.25f, soundRange = 10f, slopeSlidingAngle = 12.5f, pickupTime = 0.5f, pipeDuration = 2f;
         [SerializeField, FormerlySerializedAs("giantStartTime")] public float megaStartTime = 1.5f;
         [SerializeField] public float propellerLaunchVelocity = 6, propellerFallSpeed = 2, propellerSpinFallSpeed = 1.5f, propellerSpinTime = 0.75f, heightSmallModel = 0.42f, heightLargeModel = 0.82f;
         [SerializeField] private float jumpBufferDuration = 0.2f;
@@ -327,7 +327,7 @@ namespace NSMB.Entities.Player {
 
             body.Freeze = true;
             body.ForceSnapshotInterpolation = IsProxy;
-            Object.AssignInputAuthority(Object.StateAuthority);
+            //Object.AssignInputAuthority(Object.StateAuthority);
 
             Data = Object.ControlAuthority().GetPlayerData();
             if (Object.HasControlAuthority()) {
@@ -356,7 +356,7 @@ namespace NSMB.Entities.Player {
             ControlSystem.controls.Enable();
 
             // We've finished loading...
-            if (Object.HasControlAuthority()) {
+            if (Runner.Topology == Topologies.Shared && Object.HasControlAuthority()) {
                 Data.Rpc_FinishedLoading();
             }
 
@@ -418,33 +418,33 @@ namespace NSMB.Entities.Player {
         [Networked] private int JumpHeldStart { get; set; }
 
         private void HandleButtonHolding(PlayerNetworkInput newInputs) {
-            if (newInputs.buttons.WasPressed(PreviousInputs.buttons, PlayerControls.Up)) {
+            if (newInputs.Buttons.WasPressed(PreviousInputs.Buttons, PlayerControls.Up)) {
                 UpHeldStart = Runner.Tick;
-            } else if (!newInputs.buttons.IsSet(PlayerControls.Up)) {
+            } else if (!newInputs.Buttons.IsSet(PlayerControls.Up)) {
                 UpHeldStart = -1;
             }
 
-            if (newInputs.buttons.WasPressed(PreviousInputs.buttons, PlayerControls.Down)) {
+            if (newInputs.Buttons.WasPressed(PreviousInputs.Buttons, PlayerControls.Down)) {
                 DownHeldStart = Runner.Tick;
-            } else if (!newInputs.buttons.IsSet(PlayerControls.Down)) {
+            } else if (!newInputs.Buttons.IsSet(PlayerControls.Down)) {
                 DownHeldStart = -1;
             }
 
-            if (newInputs.buttons.WasPressed(PreviousInputs.buttons, PlayerControls.Left)) {
+            if (newInputs.Buttons.WasPressed(PreviousInputs.Buttons, PlayerControls.Left)) {
                 LeftHeldStart = Runner.Tick;
-            } else if (!newInputs.buttons.IsSet(PlayerControls.Left)) {
+            } else if (!newInputs.Buttons.IsSet(PlayerControls.Left)) {
                 LeftHeldStart = -1;
             }
 
-            if (newInputs.buttons.WasPressed(PreviousInputs.buttons, PlayerControls.Right)) {
+            if (newInputs.Buttons.WasPressed(PreviousInputs.Buttons, PlayerControls.Right)) {
                 RightHeldStart = Runner.Tick;
-            } else if (!newInputs.buttons.IsSet(PlayerControls.Right)) {
+            } else if (!newInputs.Buttons.IsSet(PlayerControls.Right)) {
                 RightHeldStart = -1;
             }
 
-            if (newInputs.buttons.WasPressed(PreviousInputs.buttons, PlayerControls.Jump)) {
+            if (newInputs.Buttons.WasPressed(PreviousInputs.Buttons, PlayerControls.Jump)) {
                 JumpHeldStart = Runner.Tick;
-            } else if (!newInputs.buttons.IsSet(PlayerControls.Jump)) {
+            } else if (!newInputs.Buttons.IsSet(PlayerControls.Jump)) {
                 JumpHeldStart = -1;
             }
         }
@@ -453,14 +453,14 @@ namespace NSMB.Entities.Player {
             PlayerNetworkInput inputs;
             if ((Runner.Tick - LastInputTick) > Runner.TickRate * 0.25f) {
                 inputs = default;
-                inputs.powerupActionCounter = PreviousInputs.powerupActionCounter;
+                inputs.PowerupActionCounter = PreviousInputs.PowerupActionCounter;
             } else {
                 inputs = PreviousInputs;
-                inputs.buttons.Set(PlayerControls.Up, inputs.buttons.IsSet(PlayerControls.Up) && UpHeldStart != -1 && (UpHeldStart == Runner.Tick || (Runner.Tick - UpHeldStart) > Runner.TickRate * 0.1f));
-                inputs.buttons.Set(PlayerControls.Down, inputs.buttons.IsSet(PlayerControls.Down) && DownHeldStart != -1 && (DownHeldStart == Runner.Tick || (Runner.Tick - DownHeldStart) > Runner.TickRate * 0.1f));
-                inputs.buttons.Set(PlayerControls.Left, inputs.buttons.IsSet(PlayerControls.Left) && LeftHeldStart != -1 && (LeftHeldStart == Runner.Tick || (Runner.Tick - LeftHeldStart) > Runner.TickRate * 0.1f));
-                inputs.buttons.Set(PlayerControls.Right, inputs.buttons.IsSet(PlayerControls.Right) && RightHeldStart != -1 && (RightHeldStart == Runner.Tick || (Runner.Tick - RightHeldStart) > Runner.TickRate * 0.1f));
-                inputs.buttons.Set(PlayerControls.Jump, inputs.buttons.IsSet(PlayerControls.Jump) && JumpHeldStart != -1 && (JumpHeldStart == Runner.Tick || (Runner.Tick - JumpHeldStart) > Runner.TickRate * 0.1f));
+                inputs.Buttons.Set(PlayerControls.Up, inputs.Buttons.IsSet(PlayerControls.Up) && UpHeldStart != -1 && (UpHeldStart == Runner.Tick || (Runner.Tick - UpHeldStart) > Runner.TickRate * 0.1f));
+                inputs.Buttons.Set(PlayerControls.Down, inputs.Buttons.IsSet(PlayerControls.Down) && DownHeldStart != -1 && (DownHeldStart == Runner.Tick || (Runner.Tick - DownHeldStart) > Runner.TickRate * 0.1f));
+                inputs.Buttons.Set(PlayerControls.Left, inputs.Buttons.IsSet(PlayerControls.Left) && LeftHeldStart != -1 && (LeftHeldStart == Runner.Tick || (Runner.Tick - LeftHeldStart) > Runner.TickRate * 0.1f));
+                inputs.Buttons.Set(PlayerControls.Right, inputs.Buttons.IsSet(PlayerControls.Right) && RightHeldStart != -1 && (RightHeldStart == Runner.Tick || (Runner.Tick - RightHeldStart) > Runner.TickRate * 0.1f));
+                inputs.Buttons.Set(PlayerControls.Jump, inputs.Buttons.IsSet(PlayerControls.Jump) && JumpHeldStart != -1 && (JumpHeldStart == Runner.Tick || (Runner.Tick - JumpHeldStart) > Runner.TickRate * 0.1f));
             }
             return inputs;
         }
@@ -498,12 +498,15 @@ namespace NSMB.Entities.Player {
 
                 } else if (!IsFrozen) {
 
-                    NetworkButtons heldButtons = input.buttons;
-                    NetworkButtons pressedButtons = input.buttons.GetPressed(PreviousInputs.buttons);
+                    NetworkButtons heldButtons = input.Buttons;
+                    NetworkButtons pressedButtons = input.Buttons.GetPressed(PreviousInputs.Buttons);
 
                     if (!IsDead) {
-                        HandleGroundCollision();
+                        IsOnGround = body.Data.OnGround;
                         IsOnGround |= GroundSnapCheck();
+                        IsOnGround |= IsWaterWalking;
+                        body.Data.OnGround |= IsOnGround;
+                        HandleGroundCollision();
 
                         CheckForEntityCollision();
 
@@ -529,7 +532,7 @@ namespace NSMB.Entities.Player {
                     PreviousTickIsOnGround = IsOnGround;
                 }
 
-                animationController.HandlePipeAnimation();
+                HandlePipes();
                 PreviousInputs = input;
             }
 
@@ -600,7 +603,7 @@ namespace NSMB.Entities.Player {
             }
         }
 
-        #region -- COLLISIONS --.// hand
+        #region -- COLLISIONS --
         private void HandleGroundCollision() {
             IsOnGround = body.Data.OnGround && PropellerLaunchTimer.ExpiredOrNotRunning(Runner);
             OnSpinner = null;
@@ -608,7 +611,7 @@ namespace NSMB.Entities.Player {
             foreach (PhysicsDataStruct.ObjectContact objectContact in body.Data.ObjectsStandingOn) {
                 NetworkObject obj = objectContact.GetNetworkObject(Runner);
 
-                // Predictive objects don't have a NetworkID.
+                // What.
                 if (!obj) {
                     continue;
                 }
@@ -616,7 +619,6 @@ namespace NSMB.Entities.Player {
                 if (obj.CompareTag("spinner") && obj.gameObject.TryGetComponent(out SpinnerAnimator spinner)) {
                     OnSpinner = spinner;
                     spinner.HasPlayer = true;
-                    break;
                 }
             }
         }
@@ -646,7 +648,7 @@ namespace NSMB.Entities.Player {
             foreach (BoxCollider2D hitbox in hitboxes) {
                 Vector2 origin = body.Position + (hitbox.offset * transform.localScale)/* + (body.Velocity * Runner.DeltaTime)*/;
 
-                int hits = Runner.GetPhysicsScene2D().OverlapBox(origin, hitbox.size, 0, TempCollisionBuffer);
+                int hits = Runner.GetPhysicsScene2D().OverlapBox(origin, hitbox.size * transform.localScale, 0, TempCollisionBuffer);
                 Array.Copy(TempCollisionBuffer, 0, CollisionBuffer, totalHits, hits);
                 totalHits += hits;
 
@@ -968,7 +970,7 @@ namespace NSMB.Entities.Player {
 
             // Input nothing when paused
             if (GameManager.Instance.paused) {
-                newInput.buttons.SetAllUp();
+                newInput.Buttons.SetAllUp();
                 input.Set(newInput);
                 return;
             }
@@ -985,26 +987,26 @@ namespace NSMB.Entities.Player {
             bool left = Vector2.Dot(normalizedJoystick, Vector2.left) > 0.4f;
             bool right = Vector2.Dot(normalizedJoystick, Vector2.right) > 0.4f;
 
-            newInput.buttons.Set(PlayerControls.Up, up);
-            newInput.buttons.Set(PlayerControls.Down, down);
-            newInput.buttons.Set(PlayerControls.Left, left);
-            newInput.buttons.Set(PlayerControls.Right, right);
-            newInput.buttons.Set(PlayerControls.Jump, jump);
-            newInput.buttons.Set(PlayerControls.Sprint, sprint ^ Settings.Instance.controlsAutoSprint);
-            newInput.buttons.Set(PlayerControls.PowerupAction, powerup);
+            newInput.Buttons.Set(PlayerControls.Up, up);
+            newInput.Buttons.Set(PlayerControls.Down, down);
+            newInput.Buttons.Set(PlayerControls.Left, left);
+            newInput.Buttons.Set(PlayerControls.Right, right);
+            newInput.Buttons.Set(PlayerControls.Jump, jump);
+            newInput.Buttons.Set(PlayerControls.Sprint, sprint ^ Settings.Instance.controlsAutoSprint);
+            newInput.Buttons.Set(PlayerControls.PowerupAction, powerup);
 
             // Powerup action counter to avoid dropped inputs
-            NetworkButtons pressed = newInput.buttons.GetPressed(onInputPreviousInputs.buttons);
+            NetworkButtons pressed = newInput.Buttons.GetPressed(onInputPreviousInputs.Buttons);
             if (pressed.IsSet(PlayerControls.PowerupAction)
                 || (pressed.IsSet(PlayerControls.Sprint) && Settings.Instance.controlsFireballSprint && (State == Enums.PowerupState.FireFlower || State == Enums.PowerupState.IceFlower))
                 || (pressed.IsSet(PlayerControls.Jump) && !IsOnGround && Settings.Instance.controlsPropellerJump && State == Enums.PowerupState.PropellerMushroom)) {
 
-                newInput.powerupActionCounter++;
+                newInput.PowerupActionCounter++;
             }
 
             // Jump tick to avoid dropped inputs
             if (pressed.IsSet(PlayerControls.Jump)) {
-                newInput.lastJumpPressTick = Runner.Tick;
+                newInput.LastJumpPressTick = Runner.Tick;
             }
 
             input.Set(newInput);
@@ -1012,7 +1014,7 @@ namespace NSMB.Entities.Player {
         }
 
         private void CheckForPowerupActions(PlayerNetworkInput current, PlayerNetworkInput previous) {
-            if (current.powerupActionCounter == previous.powerupActionCounter) {
+            if (current.PowerupActionCounter == previous.PowerupActionCounter) {
                 return;
             }
 
@@ -1090,7 +1092,7 @@ namespace NSMB.Entities.Player {
         }
 
         private void StartPropeller() {
-            if (State != Enums.PowerupState.PropellerMushroom || IsGroundpounding || (IsSpinnerFlying && IsDrilling) || IsPropellerFlying || IsCrouching || IsSliding || WallJumpTimer.IsActive(Runner)) {
+            if (State != Enums.PowerupState.PropellerMushroom || InWater || IsGroundpounding || (IsSpinnerFlying && IsDrilling) || IsPropellerFlying || IsCrouching || IsSliding || WallJumpTimer.IsActive(Runner)) {
                 return;
             }
 
@@ -1314,11 +1316,11 @@ namespace NSMB.Entities.Player {
                 fastStars = true;
                 starDirection = noLivesStarSpawnDirection++ % 4;
 
-                if (starDirection == 2) {
-                    starDirection = 1;
-                } else if (starDirection == 1) {
-                    starDirection = 2;
-                }
+                starDirection = starDirection switch {
+                    2 => 1,
+                    1 => 2,
+                    _ => starDirection
+                };
             }
 
             while (amount > 0) {
@@ -1327,13 +1329,11 @@ namespace NSMB.Entities.Player {
                 }
 
                 if (!fastStars) {
-                    if (starDirection == 0) {
-                        starDirection = 2;
-                    }
-
-                    if (starDirection == 3) {
-                        starDirection = 1;
-                    }
+                    starDirection = starDirection switch {
+                        0 => 2,
+                        3 => 1,
+                        _ => starDirection
+                    };
                 }
 
                 Runner.Spawn(PrefabList.Instance.Obj_BigStar, body.Position + Vector2.up * WorldHitboxSize.y, onBeforeSpawned: (runner, obj) => {
@@ -1397,7 +1397,7 @@ namespace NSMB.Entities.Player {
             IsInKnockback = false;
             WallSlideRight = false;
             WallSlideLeft = false;
-            IsSwimming = false;
+            InWater = null;
             IsWaterWalking = false;
             IsFrozen = false;
 
@@ -1494,7 +1494,7 @@ namespace NSMB.Entities.Player {
             IsSkidding = false;
             IsGroundpounding = false;
             IsInShell = false;
-            IsSwimming = false;
+            InWater = null;
             IsWaterWalking = false;
             ResetKnockback();
             models.transform.rotation = Quaternion.Euler(0, 180, 0);
@@ -1524,7 +1524,7 @@ namespace NSMB.Entities.Player {
         }
 
         protected void PlayMegaFootstep() {
-            if (IsSwimming) {
+            if (InWater) {
                 return;
             }
 
@@ -1536,12 +1536,12 @@ namespace NSMB.Entities.Player {
         }
 
         protected void Footstep() {
-            if (IsSwimming || State == Enums.PowerupState.MegaMushroom) {
+            if (InWater || State == Enums.PowerupState.MegaMushroom) {
                 return;
             }
 
-            bool left = PreviousInputs.buttons.IsSet(PlayerControls.Left);
-            bool right = PreviousInputs.buttons.IsSet(PlayerControls.Right);
+            bool left = PreviousInputs.Buttons.IsSet(PlayerControls.Left);
+            bool right = PreviousInputs.Buttons.IsSet(PlayerControls.Right);
 
             bool reverse = body.Velocity.x != 0 && ((left ? 1 : -1) == Mathf.Sign(body.Velocity.x));
             if (OnIce && (left ^ right) && reverse) {
@@ -1662,6 +1662,10 @@ namespace NSMB.Entities.Player {
 
         #region -- KNOCKBACK --
         public void DoKnockback(bool fromRight, int starsToDrop, bool weak, NetworkObject attacker) {
+            if (InWater) {
+                weak = false;
+            }
+
             if (IsInKnockback && ((IsWeakKnockback && weak) || !IsWeakKnockback)) {
                 return;
             }
@@ -1750,13 +1754,15 @@ namespace NSMB.Entities.Player {
 
             HeldEntity = entity;
 
-            if (HeldEntity) {
-                HeldEntity.Holder = this;
-                HeldEntity.PreviousHolder = null;
-                HoldStartTime = Runner.SimulationTime;
-
-                SetHoldingOffset();
+            if (!HeldEntity) {
+                return;
             }
+
+            HeldEntity.Holder = this;
+            HeldEntity.PreviousHolder = null;
+            HoldStartTime = Runner.SimulationTime;
+
+            SetHoldingOffset();
         }
 
         private void HandleSliding(bool up, bool down, bool left, bool right) {
@@ -1894,6 +1900,13 @@ namespace NSMB.Entities.Player {
             hit = Runner.GetPhysicsScene2D().BoxCast(startPos, new Vector2(WorldHitboxSize.x, 0.05f), 0, Vector2.down, 0.4f, Layers.MaskAnyGround);
             if (hit) {
                 body.Position = startPos + (Vector2.down * hit.distance);
+                NetworkObject obj = hit.collider.GetComponentInParent<NetworkObject>();
+                if (obj) {
+                    body.Data.ObjectContacts.Add(new PhysicsDataStruct.ObjectContact() {
+                        networkObjectId = hit.collider.GetComponentInParent<NetworkObject>().Id,
+                        direction = InteractionDirection.Down
+                    });
+                }
                 return true;
             }
 
@@ -1904,7 +1917,7 @@ namespace NSMB.Entities.Player {
         public void EnterPipe(PipeManager pipe, Vector2 direction) {
             CurrentPipe = pipe;
             PipeEntering = true;
-            PipeTimer = TickTimer.CreateFromSeconds(Runner, animationController.pipeDuration * 0.5f);
+            PipeTimer = TickTimer.CreateFromSeconds(Runner, pipeDuration * 0.5f);
             body.Velocity = PipeDirection = direction;
 
             transform.position = body.Position = new Vector2(pipe.transform.position.x, transform.position.y);
@@ -1916,9 +1929,53 @@ namespace NSMB.Entities.Player {
             IsSpinnerFlying = false;
             IsInShell = false;
             if (StarmanTimer.IsActive(Runner)) {
-                StarmanTimer = TickTimer.CreateFromSeconds(Runner, (StarmanTimer.RemainingTime(Runner) ?? 0) + animationController.pipeDuration);
+                StarmanTimer = TickTimer.CreateFromSeconds(Runner, (StarmanTimer.RemainingTime(Runner) ?? 0) + pipeDuration);
             }
         }
+
+        public void HandlePipes() {
+            if (!CurrentPipe) {
+                return;
+            }
+
+            UpdateHitbox();
+
+            body.IsKinematic = true;
+            body.Velocity = PipeDirection;
+
+            if (PipeTimer.Expired(Runner)) {
+                if (PipeEntering) {
+                    // Teleport to other pipe
+                    PipeManager other = CurrentPipe.OtherPipe;
+
+                    if (CurrentPipe.OtherPipe.IsRoofPipe == CurrentPipe.IsRoofPipe) {
+                        PipeDirection *= -1;
+                    }
+
+                    Vector2 offset = PipeDirection * (pipeDuration * 0.45f);
+                    if (CurrentPipe.OtherPipe.IsRoofPipe) {
+                        float size = MainHitbox.size.y * transform.localScale.y;
+                        offset.y += size;
+                    }
+                    Vector3 tpPos = new Vector3(other.transform.position.x, other.transform.position.y, 1) - (Vector3) offset;
+                    body.Position = tpPos;
+                    cameraController.Recenter(tpPos + (Vector3) offset);
+                    PipeTimer = TickTimer.CreateFromSeconds(Runner, pipeDuration * 0.5f);
+                    PipeEntering = false;
+                    CurrentPipe = other;
+                } else {
+                    // End pipe animation
+                    CurrentPipe = null;
+                    body.IsKinematic = false;
+                    IsOnGround = false;
+                    JumpState = PlayerJumpState.None;
+                    IsCrouching = false;
+                    PipeReentryTimer = TickTimer.CreateFromSeconds(Runner, 0.25f);
+                    body.Velocity = Vector2.zero;
+                }
+            }
+        }
+
         #endregion
 
         private void HandleCrouching(bool crouchInput) {
@@ -1928,11 +1985,11 @@ namespace NSMB.Entities.Player {
                 return;
             }
 
-            if (!IsCrouching && IsSwimming && Mathf.Abs(body.Velocity.x) > 0.03f) {
+            if (!IsCrouching && InWater && Mathf.Abs(body.Velocity.x) > 0.03f) {
                 return;
             }
 
-            IsCrouching = ((IsOnGround && crouchInput && !IsGroundpounding) || (!IsOnGround && (crouchInput || (body.Velocity.y > 0 && State != Enums.PowerupState.BlueShell)) && IsCrouching && !IsSwimming) || (IsCrouching && ForceCrouchCheck())) && !HeldEntity;
+            IsCrouching = ((IsOnGround && crouchInput && !IsGroundpounding) || (!IsOnGround && (crouchInput || (body.Velocity.y > 0 && State != Enums.PowerupState.BlueShell)) && IsCrouching && !InWater) || (IsCrouching && ForceCrouchCheck())) && !HeldEntity;
         }
 
         public bool ForceCrouchCheck() {
@@ -2200,7 +2257,7 @@ namespace NSMB.Entities.Player {
             bool run = IsFunctionallyRunning && (!IsSpinnerFlying || State == Enums.PowerupState.MegaMushroom);
 
             int maxStage;
-            if (IsSwimming) {
+            if (InWater) {
                 if (State == Enums.PowerupState.BlueShell) {
                     maxStage = SWIM_SHELL_STAGE_MAX.Length - 1;
                 } else {
@@ -2215,37 +2272,21 @@ namespace NSMB.Entities.Player {
             }
 
             float[] maxArray = SPEED_STAGE_MAX;
-            if (IsSwimming) {
+            if (InWater) {
                 if (IsOnGround) {
-                    if (State == Enums.PowerupState.BlueShell) {
-                        maxArray = SWIM_WALK_SHELL_STAGE_MAX;
-                    } else {
-                        maxArray = SWIM_WALK_STAGE_MAX;
-                    }
+                    maxArray = State == Enums.PowerupState.BlueShell ? SWIM_WALK_SHELL_STAGE_MAX : SWIM_WALK_STAGE_MAX;
                 } else {
-                    if (State == Enums.PowerupState.BlueShell) {
-                        maxArray = SWIM_SHELL_STAGE_MAX;
-                    } else {
-                        maxArray = SWIM_STAGE_MAX;
-                    }
+                    maxArray = State == Enums.PowerupState.BlueShell ? SWIM_SHELL_STAGE_MAX : SWIM_STAGE_MAX;
                 }
             }
             int stage = MovementStage;
 
             float acc;
-            if (IsSwimming) {
+            if (InWater) {
                 if (IsOnGround) {
-                    if (State == Enums.PowerupState.BlueShell) {
-                        acc = SWIM_WALK_SHELL_STAGE_ACC[stage];
-                    } else {
-                        acc = SWIM_WALK_STAGE_ACC[stage];
-                    }
+                    acc = State == Enums.PowerupState.BlueShell ? SWIM_WALK_SHELL_STAGE_ACC[stage] : SWIM_WALK_STAGE_ACC[stage];
                 } else {
-                    if (State == Enums.PowerupState.BlueShell) {
-                        acc = SWIM_SHELL_STAGE_ACC[stage];
-                    } else {
-                        acc = SWIM_STAGE_ACC[stage];
-                    }
+                    acc = State == Enums.PowerupState.BlueShell ? SWIM_SHELL_STAGE_ACC[stage] : SWIM_STAGE_ACC[stage];
                 }
             } else if (OnIce) {
                 acc = ICE_STAGE_ACC[stage];
@@ -2293,7 +2334,7 @@ namespace NSMB.Entities.Player {
                 if (reverse) {
                     IsTurnaround = false;
                     if (IsOnGround) {
-                        if (!IsSwimming && speed >= SKIDDING_THRESHOLD && !HeldEntity && State != Enums.PowerupState.MegaMushroom) {
+                        if (!InWater && speed >= SKIDDING_THRESHOLD && !HeldEntity && State != Enums.PowerupState.MegaMushroom) {
                             IsSkidding = true;
                             FacingRight = sign == 1;
                         }
@@ -2341,13 +2382,13 @@ namespace NSMB.Entities.Player {
 
                 body.Velocity = new(newX, body.Velocity.y);
 
-            } else if (IsOnGround || IsSwimming) {
+            } else if (IsOnGround || InWater) {
                 // Not holding anything, sliding, or holding both directions. decelerate
                 IsSkidding = false;
                 IsTurnaround = false;
 
                 float angle = Mathf.Abs(FloorAngle);
-                if (IsSwimming) {
+                if (InWater) {
                     acc = -SWIM_BUTTON_RELEASE_DEC;
                 } else if (IsSliding) {
                     if (angle > slopeSlidingAngle) {
@@ -2415,7 +2456,7 @@ namespace NSMB.Entities.Player {
             IsDrilling = false;
             IsSpinnerFlying = false;
             IsOnGround = false;
-            IsSwimming = false;
+            InWater = null;
 
             if (!wasStuckLastTick) {
                 // Code for mario to instantly teleport to the closest free position when he gets stuck
@@ -2652,7 +2693,7 @@ namespace NSMB.Entities.Player {
 
                 float timeStunned = (Runner.Tick - KnockbackTick) * delta;
 
-                if ((IsSwimming && timeStunned > 1.5f) || (!IsSwimming && IsOnGround && Mathf.Abs(body.Velocity.x) < 0.35f && timeStunned > 0.5f)) {
+                if ((InWater && timeStunned > 1.5f) || (!InWater && IsOnGround && Mathf.Abs(body.Velocity.x) < 0.35f && timeStunned > 0.5f)) {
                     ResetKnockback();
                 }
 
@@ -2669,7 +2710,7 @@ namespace NSMB.Entities.Player {
 
             // Jump Buffering
             int bufferTicks = (int) (Runner.TickRate * jumpBufferDuration);
-            int jumpTick = input.lastJumpPressTick;
+            int jumpTick = input.LastJumpPressTick;
 
             if (LastConsumedJumpTick < jumpTick) {
                 // Doing it like this *should* help with dropped inputs... untested though.
@@ -2679,7 +2720,7 @@ namespace NSMB.Entities.Player {
 
             // Actions
             bool canJump = pressedButtons.IsSet(PlayerControls.Jump) || (Runner.Tick <= JumpBufferTick && (IsOnGround || WallSliding));
-            bool doJump = (canJump && (IsOnGround || Runner.SimulationTime <= CoyoteTime)) || (!IsSwimming && SwimJump);
+            bool doJump = (canJump && (IsOnGround || Runner.SimulationTime <= CoyoteTime)) || (!InWater && SwimJump);
             bool doWalljump = canJump /* && !IsOnGround */ && WallSliding;
             bool doGroundpound = pressedButtons.IsSet(PlayerControls.Down) || (IsPropellerFlying && heldButtons.IsSet(PlayerControls.Down));
 
@@ -2714,7 +2755,7 @@ namespace NSMB.Entities.Player {
                     BlockBumpSoundCounter++;
                 }
 
-                body.Velocity = new(body.Velocity.x, Mathf.Min(body.Velocity.y, IsSwimming && !tempHitBlock ? -2f : -0.1f));
+                body.Velocity = new(body.Velocity.x, Mathf.Min(body.Velocity.y, InWater && !tempHitBlock ? -2f : -0.1f));
             }
 
             if (IsDrilling) {
@@ -2729,7 +2770,7 @@ namespace NSMB.Entities.Player {
 
             if (IsPropellerFlying) {
                 if (PropellerLaunchTimer.IsActive(Runner)) {
-                    IsSwimming = false;
+                    InWater = null;
                     float remainingTime = PropellerLaunchTimer.RemainingTime(Runner) ?? 0f;
                     if (remainingTime > 0.9f) {
                         body.Velocity = new(body.Velocity.x, propellerLaunchVelocity);
@@ -2756,7 +2797,7 @@ namespace NSMB.Entities.Player {
             }
 
             IsWaterWalking &= State == Enums.PowerupState.MiniMushroom && (Mathf.Abs(body.Velocity.x) > 0.3f || left || right);
-            if (IsSwimming) {
+            if (InWater) {
                 bool paddle = pressedButtons.IsSet(PlayerControls.Jump);
                 HandleSwimming(left, right, down, paddle, jumpHeld);
                 return;
@@ -2953,7 +2994,7 @@ namespace NSMB.Entities.Player {
 
         private void HandleGravity(bool jumpHeld) {
 
-            if ((IsGroundpounding || IsDrilling) && IsSwimming) {
+            if ((IsGroundpounding || IsDrilling) && InWater) {
                 return;
             }
 
@@ -2985,12 +3026,12 @@ namespace NSMB.Entities.Player {
                     bool mega = State == Enums.PowerupState.MegaMushroom;
                     bool mini = State == Enums.PowerupState.MiniMushroom;
 
-                    float?[] maxArr = IsSwimming ? GRAVITY_SWIM_MAX : (mega ? GRAVITY_MEGA_MAX : (mini ? GRAVITY_MINI_MAX : GRAVITY_STAGE_MAX));
-                    float[] accArr = IsSwimming ? GRAVITY_SWIM_ACC : (mega ? GRAVITY_MEGA_ACC : (mini ? GRAVITY_MINI_ACC : GRAVITY_STAGE_ACC));
+                    float?[] maxArr = InWater ? GRAVITY_SWIM_MAX : (mega ? GRAVITY_MEGA_MAX : (mini ? GRAVITY_MINI_MAX : GRAVITY_STAGE_MAX));
+                    float[] accArr = InWater ? GRAVITY_SWIM_ACC : (mega ? GRAVITY_MEGA_ACC : (mini ? GRAVITY_MINI_ACC : GRAVITY_STAGE_ACC));
 
                     float acc = accArr[stage];
                     if (maxArr[stage] == null) {
-                        acc = (jumpHeld || IsSwimming) ? accArr[0] : accArr[^1];
+                        acc = (jumpHeld || InWater) ? accArr[0] : accArr[^1];
                     }
 
                     gravity = acc;
@@ -3010,6 +3051,12 @@ namespace NSMB.Entities.Player {
                 }
             }
 
+            if (HeldEntity is FrozenCube fc) {
+                fc.AutoBreakTimer = TickTimer.CreateFromSeconds(Runner, fc.autoBreak);
+                fc.Holder = null;
+                HeldEntity = null;
+            }
+
             IsDrilling = false;
             WallSlideLeft = false;
             WallSlideRight = false;
@@ -3017,6 +3064,8 @@ namespace NSMB.Entities.Player {
             IsSkidding = false;
             IsTurnaround = false;
             IsSpinnerFlying = false;
+            IsPropellerFlying = false;
+            UsedPropellerThisJump = false;
             IsInShell = false;
             IsJumping = false;
             JumpState = PlayerJumpState.None;
@@ -3074,7 +3123,7 @@ namespace NSMB.Entities.Player {
                 return;
             }
 
-            if (HeldEntity is FrozenCube && !IsSwimming && (Runner.SimulationTime - HoldStartTime) < pickupTime) {
+            if (HeldEntity is FrozenCube && !InWater && (Runner.SimulationTime - HoldStartTime) < pickupTime) {
                 return;
             }
 
@@ -3493,7 +3542,7 @@ namespace NSMB.Entities.Player {
                 return;
             }
 
-            if (IsSwimming) {
+            if (InWater) {
                 // Paddle
                 PlaySound(Enums.Sounds.Player_Sound_Swim);
                 animator.SetTrigger("paddle");
