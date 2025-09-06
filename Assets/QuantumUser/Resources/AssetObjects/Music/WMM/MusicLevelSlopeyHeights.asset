@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 075af0e881e112348abe562216ddc298, type: 3}
+  m_Name: MusicLevelSlopeyHeights
+  m_EditorClassIdentifier: 
+  Identifier:
+    Path: QuantumUser/Resources/AssetObjects/Music/WMM/MusicLevelSlopeyHeights
+    Guid:
+      Value: 519226449524199605
+  clip: {fileID: 8300000, guid: 464daea9094656948b421179bf278a4e, type: 3}
+  fastClip: {fileID: 8300000, guid: d35d7570f63dc97449c6bb3d5fbb3883, type: 3}
+  loopStartSeconds: 6.3
+  loopEndSeconds: 52.74
+  speedupFactor: 1.25
