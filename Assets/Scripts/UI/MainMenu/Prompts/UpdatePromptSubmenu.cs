@@ -6,7 +6,7 @@ namespace NSMB.UI.MainMenu.Submenus.Prompts {
     public class UpdatePromptSubmenu : PromptSubmenu {
 
         //---Serialized Variables
-        [SerializeField] private TMP_Text text;
+        /*[SerializeField] private TMP_Text text;
 
         //---Private Variables
         private string remoteVersion;
@@ -50,5 +50,6 @@ namespace NSMB.UI.MainMenu.Submenus.Prompts {
                 alreadyPrompted = true;
             }
         }
+        */
     }
 }

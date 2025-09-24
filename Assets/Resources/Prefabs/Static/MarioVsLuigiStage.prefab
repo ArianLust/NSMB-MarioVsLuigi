@@ -759,7 +759,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   MapData: {fileID: 7682502346014357760}
-  Stage: {fileID: 0}
 --- !u!1 &9097954689152686375
 GameObject:
   m_ObjectHideFlags: 0
@@ -828,10 +827,10 @@ MonoBehaviour:
   - PlayerAvatar:
       Id:
         Value: 0
-    PlayerNickname: 
+    PlayerNickname: LustoMusto
     UserId: 
     UseColoredNickname: 0
-    NicknameColor: 
+    NicknameColor: 1,1,0
     Character: 0
     Palette: 0
   MaxPlayerCount: 10
