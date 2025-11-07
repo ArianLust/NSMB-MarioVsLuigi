@@ -154,7 +154,7 @@ namespace NSMB.Networking {
             try {
                 await Client.ConnectUsingSettingsAsync(new AppSettings {
                     AppIdQuantum = "6b4b72d0-57c3-4991-96c1-f3f36f9548e5",
-                    AppVersion = GameVersion.Parse(Application.version).ToStringIgnoreHotfix(),
+                    AppVersion = GameVersion.Parse(Application.version).ToStringIgnoreHotfix() + "", //version seperation
                     EnableLobbyStatistics = true,
                     AuthMode = AuthModeOption.Auth,
                     FixedRegion = region,
