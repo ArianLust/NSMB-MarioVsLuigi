@@ -17,20 +17,15 @@ using UnityEngine.Networking;
 using static NSMB.Utilities.NetworkUtils;
 
 namespace NSMB.Networking {
-    public class NetworkHandler : Singleton<NetworkHandler>, IMatchmakingCallbacks, IConnectionCallbacks, IOnEventCallback {
+    public class NetworkHandler : Singleton<NetworkHandler>, IMatchmakingCallbacks, IConnectionCallbacks {
 
         //---Events
         public static event Action<ClientState, ClientState> StateChanged;
         public static event Action<string, bool> OnError;
 
         //---Constants
-        private static readonly byte EventAddonList = 101;
-        public static readonly DisconnectCause DisconnectCauseAddon = (DisconnectCause) 101;
         public static readonly string RoomIdValidChars = "BCDFGHJKLMNPRQSTVWXYZ";
         public static readonly int RoomIdLength = 4;
-        private static readonly List<DisconnectCause> NonErrorDisconnectCauses = new() {
-            DisconnectCause.None, DisconnectCause.DisconnectByClientLogic, DisconnectCause.ApplicationQuit,
-        };
 
         //---Static Variables
         public static RealtimeClient Client => Instance ? Instance.realtimeClient : null;
@@ -39,11 +34,9 @@ namespace NSMB.Networking {
         public static QuantumGame Game => Runner?.Game ?? QuantumRunner.DefaultGame;
         public static IEnumerable<Region> Regions => Client?.RegionHandler?.EnabledRegions?.OrderBy(r => r.Code);
         public static string Region => Client?.CurrentRegion ?? Instance.lastRegion;
-        public static bool WasDisconnectedViaError { get; set; }
 
         //---Private Variables
         private RealtimeClient realtimeClient;
-        private bool waitingForAddons;
         private string lastRegion;
         private Coroutine pingUpdateCoroutine;
 
@@ -56,7 +49,7 @@ namespace NSMB.Networking {
                 StateChanged?.Invoke(oldState, newState);
             };
             realtimeClient.AddCallbackTarget(this);
-
+            
             QuantumCallback.Subscribe<CallbackGameStarted>(this, OnGameStarted);
             QuantumCallback.Subscribe<CallbackPluginDisconnect>(this, OnPluginDisconnect);
             QuantumCallback.Subscribe<CallbackChecksumError>(this, OnChecksumError);
@@ -69,9 +62,7 @@ namespace NSMB.Networking {
         }
 
         public void Update() {
-            if (Client != null && Client.IsConnectedAndReady) {
-                Client.Service();
-            }
+            Client?.Service();
         }
 
         public void OnDestroy() {
@@ -104,11 +95,10 @@ namespace NSMB.Networking {
             WaitForSeconds seconds = new(1);
             CommandUpdatePing pingCommand = new();
             while (true) {
-                QuantumGame game;
-                if (Runner && (game = Runner.Game) != null) {
+                if (Game != null) {
                     pingCommand.PingMs = (int) Ping.Value;
-                    foreach (int slot in game.GetLocalPlayerSlots()) {
-                        game.SendCommand(slot, pingCommand);
+                    foreach (int slot in Game.GetLocalPlayerSlots()) {
+                        Game.SendCommand(slot, pingCommand);
                     }
                 }
                 yield return seconds;
@@ -289,19 +279,7 @@ namespace NSMB.Networking {
 
         public void OnFriendListUpdate(List<FriendInfo> friendList) { }
 
-        public void OnCreatedRoom() {
-            if (pingUpdateCoroutine != null) {
-                StopCoroutine(pingUpdateCoroutine);
-            }
-            pingUpdateCoroutine = StartCoroutine(PingUpdateCoroutine());
-
-            // Send addon list
-            waitingForAddons = false;
-            Client.OpRaiseEvent(EventAddonList, GlobalController.Instance.addonManager.LoadedAddons.Select(la => la.Definition.Guid.ToString()).ToArray(), new RaiseEventArgs {
-                CachingOption = EventCaching.AddToRoomCacheGlobal
-            }, SendOptions.SendReliable);
-            _ = StartQuantum();
-        }
+        public void OnCreatedRoom() { }
 
         public void OnCreateRoomFailed(short returnCode, string message) { }
 
@@ -311,9 +289,12 @@ namespace NSMB.Networking {
             }
             pingUpdateCoroutine = StartCoroutine(PingUpdateCoroutine());
 
-            // Don't start quantum immediately,
-            // Wait for the room list event instead.
-            waitingForAddons = true;
+            if (Client.CurrentRoom.PlayerCount == 1 || !GlobalController.Instance.addonManager.isActiveAndEnabled) {
+                _ = StartQuantum();
+            } else {
+                // Don't start quantum immediately,
+                // Wait for the room list event instead.
+            }
         }
 
         public void OnJoinRoomFailed(short returnCode, string message) {
@@ -328,7 +309,7 @@ namespace NSMB.Networking {
 
         public static void ThrowError(string key, bool network) {
             if (Runner && Runner.IsRunning) {
-                Runner.Shutdown(ShutdownCause.Error, key);
+                Runner.Shutdown(ShutdownCause.NetworkError);
             }
             OnError?.Invoke(key, network);
         }
@@ -372,7 +353,7 @@ namespace NSMB.Networking {
 
         private IEnumerator AutoDisconnectAfterSeconds(float seconds) {
             yield return new WaitForSecondsRealtime(seconds);
-            Runner.Shutdown(ShutdownCause.Error, "Desync");
+            Runner.Shutdown(ShutdownCause.NetworkError);
             ThrowError("A desync was detected in the previous game. The game was automatically aborted.\nPlease send your player.log file in the #technical-support channel within the Mario vs Luigi Online Discord and ping @ipodtouch0218.", false);
         }
 
@@ -382,7 +363,7 @@ namespace NSMB.Networking {
             ThrowError(e.Reason, true);
 
             if (Runner) {
-                Runner.Shutdown(ShutdownCause.Error, e.Reason);
+                Runner.Shutdown(ShutdownCause.NetworkError);
             }
         }
 
@@ -431,7 +412,7 @@ namespace NSMB.Networking {
             BooleanProperties props = (int) Client.CurrentRoom.CustomProperties[Enums.NetRoomProperties.BoolProperties];
             props.GameStarted = e.NewState != GameState.PreGameRoom;
 
-            Client.CurrentRoom.SetCustomProperties(new Photon.Client.PhotonHashtable {
+            Client.CurrentRoom.SetCustomProperties(new PhotonHashtable {
                 { Enums.NetRoomProperties.BoolProperties, (int) props }
             });
 
@@ -443,7 +424,7 @@ namespace NSMB.Networking {
             var bans = f.ResolveList(f.Global->BannedPlayerIds);
             foreach (var ban in bans) {
                 if (ban.UserId == Client.UserId) {
-                    QuantumRunner.Default.Shutdown(ShutdownCause.Error, "Banned");
+                    QuantumRunner.Default.Shutdown(ShutdownCause.NetworkError);
                     ThrowError("ui.error.join.banned", true);
                     return;
                 }
@@ -458,9 +439,8 @@ namespace NSMB.Networking {
             Debug.Log($"[Network] Disconnected. Reason: {cause}");
 
             if (Runner) {
-                Runner.Shutdown(ShutdownCause.Error, cause.ToString());
+                Runner.Shutdown(ShutdownCause.NetworkError);
             }
-            waitingForAddons = false;
         }
 
         public void OnRegionListReceived(RegionHandler regionHandler) { }
@@ -476,30 +456,5 @@ namespace NSMB.Networking {
         }
 
         public void OnCustomAuthenticationFailed(string debugMessage) { }
-
-        public async void OnEvent(EventData photonEvent) { 
-            if (photonEvent.Code == EventAddonList && waitingForAddons) {
-                waitingForAddons = false;
-                try {
-                    List<Guid> guids = ((string[]) photonEvent.CustomData).Select(Guid.Parse).ToList();
-                    Debug.Log($"[Addon] Got addon list of {guids.Count} addons: [{string.Join(", ", guids)}]");
-                    var loadAddonResult = await GlobalController.Instance.addonManager.LoadAllAddons(guids);
-                    if (loadAddonResult == Addons.AddonManager.LoadAllAddonsResult.Success) {
-                        _ = StartQuantum();
-                    } else {
-                        ThrowError(
-                            loadAddonResult == Addons.AddonManager.LoadAllAddonsResult.FailureDownloadsDisabled
-                                ? "ui.error.join.addons.downloadsdisabled"
-                                : "ui.error.join.addons.downloadfailed",
-                            false);
-                        Client.Disconnect(DisconnectCauseAddon);
-                    }
-                } catch (Exception e) {
-                    Debug.LogError($"[Addon] Failed to activate proper addons! Disconnecting. ({e.Message})");
-                    Client.Disconnect(DisconnectCauseAddon);
-                    throw;
-                }
-            }
-        }
     }
 }

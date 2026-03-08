@@ -11,6 +11,7 @@ namespace Quantum {
             systems.Clear();
 
             systems.Add(new EntityPrototypeSystem());
+            systems.Add(new PlayerConnectedSystem());
             systems.Add(new MvLCullingSystem());
             systems.Add(new GameLogicSystem());
             systems.Add(
@@ -57,6 +58,11 @@ namespace Quantum {
             systems.Add(new StageSystem());
 
             if (!gameConfig.IsRealGame) {
+                var debugSystem = DebugCommand.CreateSystem();
+                if (debugSystem != null) {
+                    systems.Add(debugSystem);
+                }
+
                 systems.Add(new MvLDebugSystem());
             }
         }

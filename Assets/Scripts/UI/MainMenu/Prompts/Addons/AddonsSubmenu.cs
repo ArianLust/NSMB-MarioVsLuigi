@@ -3,6 +3,7 @@ using NSMB.UI.Translation;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,14 +18,19 @@ namespace NSMB.UI.MainMenu.Submenus.Prompts.Addons {
         };
 
         //---Serialized Variables
-        [SerializeField] private GameObject loadingGraphic;
+        [SerializeField] public GameObject loadingGraphic;
         [SerializeField] public ScrollRect scrollRect;
+        [SerializeField] private bool hideNonAddons;
         [SerializeField] private AddonFileSystemEntry template;
-        [SerializeField] private TMP_Text folderLabel, loadedAddonsText;
+        [SerializeField] private TMP_Text folderLabel, selectedAddonText, loadedAddonsText;
+        [SerializeField] private RawImage selectedAddonIcon;
 
         //---Private Variables
         private List<AddonFileSystemEntry> entries = new();
         private string currentPath = "", currentRelativePath = "";
+#if UNITY_STANDALONE
+        private FileSystemWatcher watcher;
+#endif
 
         public override void Initialize() {
             base.Initialize();
@@ -40,6 +46,15 @@ namespace NSMB.UI.MainMenu.Submenus.Prompts.Addons {
                 AddonManager.OnAddonLoaded += OnAddonLoaded;
                 AddonManager.OnAddonUnloaded += OnAddonUnloaded;
 
+#if UNITY_STANDALONE
+                watcher = new();
+                if (hideNonAddons) {
+                    watcher.Filter = "*.mvladdon";
+                }
+                watcher.Changed += (_, _) => _ = OpenFolder(currentRelativePath);
+                watcher.Created += (_, _) => _ = OpenFolder(currentRelativePath);
+                watcher.Deleted += (_, _) => _ = OpenFolder(currentPath);
+#endif
                 _ = OpenFolder(".");
             }
         }
@@ -51,6 +66,10 @@ namespace NSMB.UI.MainMenu.Submenus.Prompts.Addons {
                     Destroy(entry.gameObject);
                 }
                 entries.Clear();
+#if UNITY_STANDALONE
+                watcher?.Dispose();
+                watcher = null;
+#endif
 
                 TranslationManager.OnLanguageChanged -= OnLanguageChanged;
                 AddonManager.OnAddonLoaded -= OnAddonLoaded;
@@ -61,59 +80,72 @@ namespace NSMB.UI.MainMenu.Submenus.Prompts.Addons {
         public void UpdateLoadedAddonsText() {
             int addons = GlobalController.Instance.addonManager.LoadedAddons.Count;
             if (addons == 0) {
-                loadedAddonsText.text = GlobalController.Instance.translationManager.GetTranslation("ui.rooms.create.addons.notenabled");
+                loadedAddonsText.text = GlobalController.Instance.translationManager.GetTranslation("ui.addons.manage.notenabled");
             } else {
-                loadedAddonsText.text = GlobalController.Instance.translationManager.GetTranslationWithReplacements("ui.rooms.create.addons.enabled", "addons", addons.ToString());
+                loadedAddonsText.text = GlobalController.Instance.translationManager.GetTranslationWithReplacements("ui.addons.manage.enabled", "addons", addons.ToString());
             }
         }
 
         public async Awaitable OpenFolder(string newPath) {
             await Awaitable.MainThreadAsync();
             loadingGraphic.SetActive(true);
-            string fullNewPath = new DirectoryInfo(Path.Combine(AddonManager.LocalFolderPath, currentRelativePath, newPath)).FullName;
-            string previousPath = currentPath;
-            currentPath = fullNewPath;
-            currentRelativePath = Path.GetRelativePath(AddonManager.LocalFolderPath, fullNewPath).Replace(@"\", "/");
-            if (currentRelativePath == ".") {
-                folderLabel.text = Path.GetFileName(AddonManager.LocalFolderPath) + "/";
-            } else {
-                folderLabel.text = Path.GetFileName(AddonManager.LocalFolderPath) + "/" + currentRelativePath + "/";
-            }
-
-            // Prepare paths in background thread
-            await Awaitable.BackgroundThreadAsync();
             List<ScannedPath> results = new();
+            string previousPath = currentPath;
 
-            foreach (string subdirectoryPath in Directory.EnumerateDirectories(fullNewPath)) {
-                string subdirectoryName = Path.GetFileName(subdirectoryPath);
-                results.Add(new ScannedPath {
-                    Type = ScannedPath.AddonType.Folder,
-                    FullPath = subdirectoryPath,
-                    Name = subdirectoryName,
-                });
-            }
-            var addonManager = GlobalController.Instance.addonManager;
-            foreach (string filePath in Directory.EnumerateFiles(fullNewPath)) {
-                var addon = addonManager.FindAddon(filePath);
-                string fileName = Path.GetFileName(filePath);
-
-                if (addon != null) {
-                    // This is an addon.
-                    results.Add(new ScannedPath {
-                        Type = ScannedPath.AddonType.AddonFile,
-                        Addon = addon,
-                        FullPath = filePath,
-                        Name = fileName,
-                    });
+            try {
+                string fullNewPath = new DirectoryInfo($"{AddonManager.LocalFolderPath}/{currentRelativePath}/{newPath}").FullName;
+                currentPath = fullNewPath;
+                currentRelativePath = Path.GetRelativePath(AddonManager.LocalFolderPath, fullNewPath).Replace(@"\", "/");
+                if (currentRelativePath == ".") {
+                    folderLabel.text = Path.GetFileName(AddonManager.LocalFolderPath) + "/";
                 } else {
-                    results.Add(new ScannedPath {
-                        Type = ScannedPath.AddonType.NonAddonFile,
-                        FullPath = filePath,
-                        Name = fileName,
-                    });
+                    folderLabel.text = Path.GetFileName(AddonManager.LocalFolderPath) + "/" + currentRelativePath + "/";
                 }
+
+                if (Directory.Exists(fullNewPath)) {
+                    // Prepare paths in background thread
+                    await Awaitable.BackgroundThreadAsync();
+
+                    foreach (string subdirectoryPath in Directory.EnumerateDirectories(fullNewPath)) {
+                        string subdirectoryName = Path.GetFileName(subdirectoryPath);
+                        results.Add(new ScannedPath {
+                            Type = ScannedPath.AddonType.Folder,
+                            FullPath = subdirectoryPath,
+                            Name = subdirectoryName,
+                        });
+                    }
+
+                    foreach (string filePath in Directory.EnumerateFiles(fullNewPath)) {
+                        AddonDefinition addon = null;
+                        try {
+                            using FileStream fs = new(filePath, FileMode.Open);
+                            using ZipArchive zipArchive = new(fs);
+                            addon = await AddonManager.GetAddonDefinition(zipArchive, true);
+                        } catch { }
+
+                        string fileName = Path.GetFileName(filePath);
+                        if (addon != null) {
+                            // This is an addon.
+                            results.Add(new ScannedPath {
+                                Type = ScannedPath.AddonType.AddonFile,
+                                Addon = addon,
+                                FullPath = filePath,
+                                Name = fileName,
+                            });
+                        } else if (!hideNonAddons) {
+                            results.Add(new ScannedPath {
+                                Type = ScannedPath.AddonType.NonAddonFile,
+                                FullPath = filePath,
+                                Name = fileName,
+                            });
+                        }
+                    }
+                    results.Sort();
+                }
+            } catch (Exception e) {
+                Debug.LogError($"[Addon] Failed to open folder \"{AddonManager.LocalFolderPath}/{currentRelativePath}/{newPath}\": {e.Message}");
+                Debug.LogError(e);
             }
-            results.Sort();
 
             // Create gameobjects in main thread
             await Awaitable.MainThreadAsync();
@@ -168,14 +200,32 @@ namespace NSMB.UI.MainMenu.Submenus.Prompts.Addons {
                 }
             }
             if (!selected) {
-                Canvas.EventSystem.SetSelectedGameObject(entries[0].button.gameObject);
+                if (entries.Count > 0) {
+                    Canvas.EventSystem.SetSelectedGameObject(entries[0].button.gameObject);
+                } else {
+                    Canvas.EventSystem.SetSelectedGameObject(BackButton);
+                }
             }
+#if UNITY_STANDALONE
+            try {
+                watcher.Path = currentPath;
+                watcher.EnableRaisingEvents = true;
+            } catch { }
+#endif
             loadingGraphic.SetActive(false);
+        }
+
+        public override bool TryGoBack(out bool playSound) {
+            if (loadingGraphic.activeSelf) {
+                playSound = false;
+                return false;
+            }
+            return base.TryGoBack(out playSound);
         }
 
         public class ScannedPath : IComparable<ScannedPath> {
             public AddonType Type;
-            public Addon Addon;
+            public AddonDefinition Addon;
             public string FullPath;
             public string Name;
             public bool IsFolder => Type == AddonType.Folder;
@@ -197,6 +247,23 @@ namespace NSMB.UI.MainMenu.Submenus.Prompts.Addons {
             }
         }
 
+        public void UpdateSelectedAddonText(UnityEngine.Object obj) {
+            if (obj is AddonFileSystemEntry entry && entry.Path.Type == ScannedPath.AddonType.AddonFile) {
+                var addonDef = entry.Path.Addon;
+                selectedAddonText.text = $"<line-height=0%><align=left>{addonDef.FullName}<br><align=right>{addonDef.Author}<line-height=100%><br><align=left><color=#adadad><line-height=75%><size=66.6%\n>{addonDef.Description}";
+                if (addonDef.IconTexture) {
+                    selectedAddonIcon.texture = addonDef.IconTexture;
+                    selectedAddonIcon.gameObject.SetActive(true);
+                } else {
+                    selectedAddonIcon.texture = null;
+                    selectedAddonIcon.gameObject.SetActive(false);
+                }
+            } else {
+                selectedAddonText.text = "-";
+                selectedAddonIcon.texture = null;
+                selectedAddonIcon.gameObject.SetActive(false);
+            }
+        }
 
         private void OnAddonUnloaded(LoadedAddon obj) {
             UpdateLoadedAddonsText();

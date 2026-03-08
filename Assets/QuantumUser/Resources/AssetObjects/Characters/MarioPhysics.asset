@@ -258,4 +258,5 @@ MonoBehaviour:
       RawValue: 0
     Y:
       RawValue: 0
+  IceBlockPickupFreezeFrames: 20
   MegaMushroomStepInterval: 18

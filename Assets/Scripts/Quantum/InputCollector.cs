@@ -10,13 +10,8 @@ using Input = Quantum.Input;
 namespace NSMB.Quantum {
     public class InputCollector : MonoBehaviour {
 
-        //---Properties
-        public bool IsPaused { get; set; }
-
         //---Serialized Variables
-#if UNITY_EDITOR || MVL_DEBUG
         [SerializeField] private List<DebugSpawnCommand> debugSpawnCommands = new();
-#endif
         [SerializeField] private PlayerElements playerElements;
 
         public void Start() {
@@ -33,31 +28,26 @@ namespace NSMB.Quantum {
             if (game == null || game.Configurations.Runtime.IsRealGame) {
                 return;
             }
+            var keyboard = Keyboard.current;
 
             foreach (var debug in debugSpawnCommands) {
-                if (UnityEngine.Input.GetKeyDown(debug.KeyCode)) {
-                    game.SendCommand(new CommandMvLDebugCmd { 
+                if (keyboard[debug.Key].wasPressedThisFrame) {
+                    game.SendCommand(new CommandMvLDebugCmd {
                         CommandId = CommandMvLDebugCmd.DebugCommand.SpawnEntity,
                         SpawnData = debug.Entity,
                     });
                 }
             }
-            if (UnityEngine.Input.GetKeyDown(KeyCode.P)) {
+            if (keyboard[Key.P].wasPressedThisFrame) {
                 game.SendCommand(new CommandMvLDebugCmd {
                     CommandId = CommandMvLDebugCmd.DebugCommand.KillSelf,
                 });
             }
-            if (UnityEngine.Input.GetKeyDown(KeyCode.O)) {
+            if (keyboard[Key.O].wasPressedThisFrame) {
                 game.SendCommand(new CommandMvLDebugCmd {
                     CommandId = CommandMvLDebugCmd.DebugCommand.FreezeSelf,
                 });
             }
-        }
-
-        [Serializable]
-        public class DebugSpawnCommand {
-            public KeyCode KeyCode;
-            public AssetRef<EntityPrototype> Entity;
         }
 
         public void OnPowerupAction(InputAction.CallbackContext context) {
@@ -69,7 +59,7 @@ namespace NSMB.Quantum {
         public void OnPollInput(CallbackPollInput callback) {
             Input i;
 
-            if (IsPaused) {
+            if (playerElements.PauseMenu.IsPaused) {
                 i = new();
             } else {
                 Settings.Controls.Player.Enable();
@@ -102,5 +92,13 @@ namespace NSMB.Quantum {
 
             callback.SetInput(i, DeterministicInputFlags.Repeatable);
         }
+
+
+        [Serializable]
+        public class DebugSpawnCommand {
+            public Key Key;
+            public AssetRef<EntityPrototype> Entity;
+        }
+
     }
 }

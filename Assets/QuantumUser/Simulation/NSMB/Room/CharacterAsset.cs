@@ -1,9 +1,10 @@
+using Photon.Deterministic;
 using Quantum;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class CharacterAsset : AssetObject, ISoundEffectOverrideProvider {
+public class CharacterAsset : AssetObject, ISoundOverrideProvider {
 
     public AssetRef<EntityPrototype> Prototype;
 
@@ -14,6 +15,7 @@ public class CharacterAsset : AssetObject, ISoundEffectOverrideProvider {
     public Sprite LoadingSmallSprite;
     public Sprite LoadingLargeSprite;
     public Sprite ReadySprite;
+    public Sprite SilhouetteSprite;
 
     public Sprite SelectionSprite;
     public Color SelectionColor = Color.white;
@@ -26,7 +28,7 @@ public class CharacterAsset : AssetObject, ISoundEffectOverrideProvider {
     public SoundEffectOverride[] SfxOverrides;
 
     [NonSerialized] private Dictionary<SoundEffect, SoundEffectOverride> overridesDict;
-    public override void Loaded(IResourceManager resourceManager) {
+    public override void Loaded(IResourceManager resourceManager, Native.Allocator allocator) {
         overridesDict = new();
         if (SfxOverrides != null) {
             foreach (var @override in SfxOverrides) {
@@ -35,7 +37,7 @@ public class CharacterAsset : AssetObject, ISoundEffectOverrideProvider {
         }
     }
 
-    public SoundEffectOverride GetOverrideForSfx(SoundEffect sfx) {
+    public SoundEffectOverride GetOverride(SoundEffect sfx) {
         overridesDict.TryGetValue(sfx, out var result);
         return result;
     }

@@ -104,7 +104,7 @@ namespace Quantum {
     /// <summary>
     /// System entries to be instantiated on simulation start.
     /// </summary>
-    [InlineHelp] public List<SystemEntry> Entries = new();
+    public List<SystemEntry> Entries = new();
 
     /// <summary>
     /// Converts the systems configuration into a list of system objects while calling the matching (Name, Children) constructors.

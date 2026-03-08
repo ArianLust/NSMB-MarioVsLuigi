@@ -1,3 +1,4 @@
+using NSMB.Addons;
 using NSMB.Networking;
 using NSMB.UI.MainMenu.Submenus.Replays;
 using NSMB.Utilities;
@@ -9,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace NSMB.Replay {
@@ -96,12 +98,10 @@ namespace NSMB.Replay {
             var manager = ReplayListManager.Instance;
             if (manager) {
                 var deletions = manager.GetTemporaryReplaysToDelete();
-                if (deletions != null) {
-                    foreach (var replay in deletions) {
-                        Debug.Log($"[Replay] Automatically deleting temporary replay '{replay.ReplayFile.Header.GetDisplayName()}' ({replay.ReplayFile.FilePath}) to make room.");
-                        File.Delete(replay.ReplayFile.FilePath);
-                        manager.RemoveReplay(replay);
-                    }
+                foreach (var replayPath in deletions) {
+                    Debug.Log($"[Replay] Automatically deleting temporary replay '{replayPath}'.");
+                    File.Delete(replayPath);
+                    manager.RemoveReplayByPath(replayPath);
                 }
             }
 
@@ -147,7 +147,7 @@ namespace NSMB.Replay {
                         // Failed to create file; maybe they have two copies of the game open?
                         finalFilePath = Path.Combine(replayFolder, $"Replay-{now}-{++attempts}.mvlreplay");
                     }
-                } while (outputStream == null);
+                } while (outputStream == null && attempts < 5);
 
                 ref GameRules rules = ref f.Global->Rules;
                 BinaryReplayHeader header = new() {
@@ -169,7 +169,7 @@ namespace NSMB.Replay {
                     PlayerInformation = playerInformation,
                     WinningTeam = winner,
                     AddonGuids = GlobalController.Instance.addonManager.LoadedAddons
-                        .Select(la => la.Definition.Guid)
+                        .Select(la => la.Definition.ReleaseGuid)
                         .ToList()
                 };
 
@@ -201,33 +201,41 @@ namespace NSMB.Replay {
             GlobalController.Instance.loadingCanvas.dontHideOnGameDestroy = true;
             GlobalController.Instance.loadingCanvas.Initialize(null);
 
-            if (NetworkHandler.Client.IsConnected) {
-                await NetworkHandler.Client.DisconnectAsync();
-            }
             if (NetworkHandler.Runner && NetworkHandler.Runner.IsRunning) {
                 await NetworkHandler.Runner.ShutdownAsync();
             }
-
-            var loadAddonResult = await GlobalController.Instance.addonManager.LoadAllAddons(replay.Header.AddonGuids);
-            if (loadAddonResult != Addons.AddonManager.LoadAllAddonsResult.Success) {
-                NetworkHandler.ThrowError(
-                    loadAddonResult == Addons.AddonManager.LoadAllAddonsResult.FailureDownloadsDisabled 
-                        ? "ui.error.replay.addons.downloadsdisabled"
-                        : "ui.error.replay.addons.downloadfailed",
-                    false);
-                return;
+            if (NetworkHandler.Client.IsConnected) {
+                await NetworkHandler.Client.DisconnectAsync();
             }
 
+            if (GlobalController.Instance.addonManager.isActiveAndEnabled) {
+                var loadAddonResult = await GlobalController.Instance.addonManager.LoadAllAddons(replay.Header.AddonGuids);
+                if (loadAddonResult.Result == LoadAllAddonsResult.Success) {
+                    _ = StartReplay(replay);
+                } else if (loadAddonResult.Result == LoadAllAddonsResult.DownloadRequired) {
+                    AddonManager.RequestDownloadAddons(loadAddonResult.RequiredDownloads, (result) => {
+                        if (result == AddonManager.AddonDownloadResult.Success) {
+                            _ = StartReplay(replay);
+                        } else if (result == AddonManager.AddonDownloadResult.Cancelled) {
+                            GlobalController.Instance.loadingCanvas.EndAnimation();
+                        } else if (result == AddonManager.AddonDownloadResult.Failure) {
+                            NetworkHandler.ThrowError("ui.error.replay.addons.downloadfailed", false);
+                        }
+                    });
+                } else if (loadAddonResult.Result == LoadAllAddonsResult.Failure) {
+                    NetworkHandler.ThrowError("ui.error.replay.addons.downloadfailed", false);
+                    return;
+                }
+            } else {
+                _ = StartReplay(replay);
+            }
+        }
+
+        private async Task StartReplay(BinaryReplayFile replay) {
             CurrentReplay = replay;
 
             var serializer = new QuantumUnityJsonSerializer();
-            RuntimeConfig runtimeConfig;
-            try {
-                runtimeConfig = serializer.ConfigFromByteArray<RuntimeConfig>(replay.DecompressedRuntimeConfigData, compressed: false);
-            } catch {
-                // Bodge: support old 1.8 replays that double compressed.
-                runtimeConfig = serializer.ConfigFromByteArray<RuntimeConfig>(replay.DecompressedRuntimeConfigData, compressed: true);
-            }
+            RuntimeConfig runtimeConfig = serializer.ConfigFromByteArray<RuntimeConfig>(replay.DecompressedRuntimeConfigData, compressed: false);
             var deterministicConfig = DeterministicSessionConfig.FromByteArray(replay.DecompressedDeterministicConfigData);
             var inputStream = new BitStream(replay.DecompressedInputData);
             var replayInputProvider = new BitStreamReplayInputProvider(inputStream, ReplayEnd);
@@ -302,7 +310,7 @@ namespace NSMB.Replay {
         }
 
         private unsafe void OnReplaysEnabledChanged(bool enable) {
-            var game = QuantumRunner.DefaultGame;
+            QuantumGame game = QuantumRunner.DefaultGame;
             if (game == null) {
                 return;
             }

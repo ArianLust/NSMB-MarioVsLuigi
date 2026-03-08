@@ -24,7 +24,7 @@ namespace NSMB.Cameras {
         //---Serialized Variables
         [SerializeField] private PlayerElements playerElements;
         [SerializeField] private List<SecondaryCameraPositioner> secondaryPositioners;
-        [SerializeField] private float zoomSpeed = 3, moveSpeed = 2;
+        [SerializeField] private float zoomSpeed = 1, moveSpeed = 2;
         [SerializeField] private AudioSource zoomSfx;
 
         //---Private Variables
@@ -92,12 +92,10 @@ namespace NSMB.Cameras {
 
             zoomSfx.enabled = false;
 
-            if (!Target.IsValid || !f.Exists(Target) || !fp.Exists(Target)) {
+            if (!f.Unsafe.TryGetPointer(Target, out CameraController* cameraControllerCurrent)
+                || !fp.Unsafe.TryGetPointer(Target, out CameraController* cameraControllerPrevious)) {
                 return;
             }
-
-            var cameraControllerCurrent = f.Unsafe.GetPointer<CameraController>(Target);
-            var cameraControllerPrevious = fp.Unsafe.GetPointer<CameraController>(Target);
 
             // Resize from game
             float targetOrthoSize = Mathf.Lerp(cameraControllerPrevious->OrthographicSize.AsFloat, cameraControllerCurrent->OrthographicSize.AsFloat, game.InterpolationFactor);
@@ -225,7 +223,7 @@ namespace NSMB.Cameras {
 
             float maxOrthoSize = stage.TileDimensions.X * 0.25f / ourCamera.aspect;
             if (zoomAmount != 0) {
-                float newOrthoSize = ourCamera.orthographicSize + (zoomAmount * zoomSpeed * Time.unscaledDeltaTime);
+                float newOrthoSize = ourCamera.orthographicSize + (zoomAmount * zoomSpeed * Time.unscaledDeltaTime * ourCamera.orthographicSize);
                 newOrthoSize = Mathf.Clamp(newOrthoSize, 0.5f, maxOrthoSize);
                 ourCamera.orthographicSize = newOrthoSize;
 

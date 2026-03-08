@@ -1,10 +1,11 @@
 using Photon.Deterministic;
 using Quantum;
+using Quantum.Profiling;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public unsafe class VersusStageData : AssetObject, ISoundEffectOverrideProvider {
+public unsafe class VersusStageData : AssetObject, ISoundOverrideProvider {
 
     //---Properties
     public FPVector2 StageWorldMin => new FPVector2(TileOrigin.X, TileOrigin.Y) / 2 + TilemapWorldPosition;
@@ -46,11 +47,10 @@ public unsafe class VersusStageData : AssetObject, ISoundEffectOverrideProvider 
     public ColorRGBA UIColor = new(24, 178, 170);
     public bool HidePlayersOnMinimap;
 
-    [Header("-- Powerups")]
-    public bool SpawnBigPowerups = true;
-    public bool SpawnVerticalPowerups = true;
+    [Header("-- Coin Items")]
+    public List<AssetRef<CoinItemAsset>> BannedCoinItems;
 
-    [Header("---Sound")]
+    [Header("---Sound Overrides")]
     public SoundEffectOverride[] SfxOverrides;
 
     [Header("-- Music")]
@@ -62,11 +62,13 @@ public unsafe class VersusStageData : AssetObject, ISoundEffectOverrideProvider 
     [HideInInspector] public FPVector2[] BigStarSpawnpoints;
 
     [NonSerialized] private Dictionary<SoundEffect, SoundEffectOverride> overridesDict;
-    public SoundEffectOverride GetOverrideForSfx(SoundEffect sfx) {
+    public SoundEffectOverride GetOverride(SoundEffect sfx) {
         if (overridesDict == null) {
             overridesDict = new();
-            foreach (var @override in SfxOverrides) {
-                overridesDict[@override.SoundEffect] = @override;
+            if (SfxOverrides != null) {
+                foreach (var @override in SfxOverrides) {
+                    overridesDict[@override.SoundEffect] = @override;
+                }
             }
         }
         overridesDict.TryGetValue(sfx, out var result);

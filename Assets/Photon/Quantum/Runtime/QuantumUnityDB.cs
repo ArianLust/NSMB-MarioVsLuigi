@@ -47,7 +47,12 @@ namespace Quantum {
     /// Path to index in <see cref="_entries"/> mapping.
     /// </summary>
     private readonly Dictionary<string, int> _pathToIndex = new();
- 
+    
+    /// <summary>
+    /// Allocator used for assets initialization and disposal.
+    /// </summary>
+    private readonly Native.Allocator _allocator = new QuantumUnityNativeAllocator();
+
     /// <summary>
     /// Assets are disposed on the main thread, but the disposal is scheduled from the worker threads.
     /// </summary>
@@ -85,6 +90,7 @@ namespace Quantum {
     /// </summary>
     protected void OnEnable() {
       FPMathUtils.LoadLookupTables();
+      Native.Utils ??= new QuantumUnityNativeUtility();
 
       _mainThreadId = Thread.CurrentThread.ManagedThreadId;
       _guidToIndex.Clear();
@@ -154,10 +160,16 @@ namespace Quantum {
     /// <param name="assetObject">The <see cref="AssetObject"/> generate the <see cref="AssetGuid"/> for.</param>
     /// <returns>The generated <see cref="AssetGuid"/>.</returns>
     public static AssetGuid CreateRuntimeDeterministicGuid(AssetObject assetObject) {
-      Assert.Check(assetObject);
       Assert.Check(string.IsNullOrEmpty(assetObject.name) == false, "AssetObject name is empty.");
       var type = assetObject.GetType();
-      return CreateRuntimeDeterministicGuid(assetObject.name, type);
+
+      AssetGuid guid = CreateRuntimeDeterministicGuid(assetObject.name, type);
+
+      if (GetGlobalAsset(guid) != null) {
+        throw new Exception("Guid generated matches an existing DB entry, please rename your asset.");
+      }
+      
+      return guid;
     }
     
     /// <summary>
@@ -693,13 +705,13 @@ namespace Quantum {
               try {
                 var asset = entry.Source.WaitForResult();
                 Assert.Check(asset != null);
-                Assert.Check(asset.Guid == guid, "Expected to load {0}, but {1} was loaded instead", asset.Guid, guid);
+                Assert.Check(asset.Guid == guid, "Expected to load {0}, but {1} was loaded instead", guid, asset.Guid);
 
                 entry.LoadedAsset = asset;
                 entry.State.Exchange(EntryState.LoadedInvokingCallbacks);
 
                 Log.TraceAssets(asset, $"Invoking Loaded callback for {guid}.");
-                asset.Loaded(this);
+                asset.Loaded(this, _allocator);
                 entry.State.Exchange(EntryState.Loaded);
               } catch (Exception) {
                 entry.LoadedAsset = null;
@@ -785,7 +797,7 @@ namespace Quantum {
       try {
         var loadedAsset = entry.LoadedAsset;
         if (loadedAsset) {
-          loadedAsset.Disposed(this);
+          loadedAsset.Disposed(this, _allocator);
         }
       } catch (Exception ex) {
         Log.Exception($"Error while disposing {entry.Guid}", ex);

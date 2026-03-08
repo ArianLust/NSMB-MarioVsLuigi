@@ -54,12 +54,10 @@ namespace NSMB.UI.MainMenu.Submenus.Replays {
         //---Private Variables
         private readonly List<TMP_Text> headers = new();
         private readonly List<ReplayListEntry> replays = new();
-        private readonly HashSet<string> loadedReplayPaths = new();
         private readonly SortedSet<ReplayListEntry> temporaryReplays = new(new ReplayDateComparer());
         private bool sortAscending;
         private int sortIndex;
         private bool languageChangedSinceLastOpen;
-        private FileSystemWatcher watcher;
 
 
         [RuntimeInitializeOnLoadMethod]
@@ -94,52 +92,14 @@ namespace NSMB.UI.MainMenu.Submenus.Replays {
         }
 
         public void Initialize() {
-#if TODO && !UNITY_WEBGL
-            watcher = new FileSystemWatcher(ReplayDirectory) {
-                NotifyFilter = NotifyFilters.CreationTime
-                                     | NotifyFilters.DirectoryName
-                                     | NotifyFilters.FileName
-                                     | NotifyFilters.LastWrite,
-                IncludeSubdirectories = true,
-                Filter = "*.mvlreplay",
-            };
-            watcher.Changed += Watcher_Changed;
-            watcher.Renamed += OnFileRenamed;
-            watcher.Created += OnFileCreated;
-            watcher.Deleted += OnFileDeleted;
-            watcher.EnableRaisingEvents = true;
-#endif
             Instance = this;
             TranslationManager.OnLanguageChanged += OnLanguageChanged;
 
-            _ = FindReplays();
-        }
-
-        private void Watcher_Changed(object sender, FileSystemEventArgs e) {
-            print(e.FullPath + " changed");
-        }
-
-        private void OnFileDeleted(object sender, FileSystemEventArgs e) {
-            foreach (var deletedReplay in replays.Where(rle => rle.ReplayFile.FilePath == e.FullPath).ToArray()) {
-                replays.Remove(deletedReplay);
-                temporaryReplays.Remove(deletedReplay);
-                Destroy(deletedReplay.gameObject);
-            }
-        }
-
-        private void OnFileCreated(object sender, FileSystemEventArgs e) {
-            StartCoroutine(ImportFile(e.FullPath, false));
-        }
-
-        private void OnFileRenamed(object sender, RenamedEventArgs e) {
-            print("RENAMED: " + e.OldFullPath + " -> " + e.FullPath);
+            // _ = FindReplays();
         }
 
         public void OnDestroyCustom() {
             TranslationManager.OnLanguageChanged -= OnLanguageChanged;
-#if TODO && !UNITY_WEBGL
-            watcher.Dispose();
-#endif
         }
 
         public void Show() {
@@ -151,9 +111,8 @@ namespace NSMB.UI.MainMenu.Submenus.Replays {
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform) layout.transform);
             Canvas.ForceUpdateCanvases();
 
-#if !TODO || UNITY_WEBGL
             _ = FindReplays();
-#endif
+
             //SortReplays();
             OnScrollRectScrolled(default);
             OnLanguageChanged(GlobalController.Instance.translationManager);
@@ -224,7 +183,6 @@ namespace NSMB.UI.MainMenu.Submenus.Replays {
                 gamemodeName = "<sprite name=room_customlevel> ???";
             }
 
-            // TODO: possibly parse from initial frame instead of storing as separate members
             // Playerlist
             StringBuilder builder = new();
             foreach (int i in Enumerable.Range(0, header.PlayerInformation.Length).OrderByDescending(idx => header.PlayerInformation[idx].FinalObjectiveCount)) {
@@ -333,6 +291,10 @@ namespace NSMB.UI.MainMenu.Submenus.Replays {
             }
         }
 
+        public void RemoveReplayByPath(string path) {
+            RemoveReplay(replays.First(rle => rle.ReplayFile.FilePath == path));
+        }
+
         private async Awaitable FindReplays() {
             try {
                 await Awaitable.MainThreadAsync();
@@ -348,17 +310,19 @@ namespace NSMB.UI.MainMenu.Submenus.Replays {
                     languageChangedSinceLastOpen = false;
                 }
 
-                await Awaitable.BackgroundThreadAsync();
+                //await Awaitable.BackgroundThreadAsync();
 
                 List<BinaryReplayFile> newReplays = new();
                 foreach (var filepath in Directory.EnumerateFiles(ReplayDirectory, "*.mvlreplay", SearchOption.AllDirectories)) {
-                    if (loadedReplayPaths.Contains(filepath)) {
+                    if (newReplays.Any(brf => brf.FilePath == filepath)) {
                         continue;
                     }
 
-                    if (BinaryReplayFile.TryLoadNewFromFile(filepath, false, out BinaryReplayFile replay) == ReplayParseResult.Success) {
+                    var parseResult = BinaryReplayFile.TryLoadNewFromFile(filepath, false, out BinaryReplayFile replay);
+                    if (parseResult == ReplayParseResult.Success) {
                         newReplays.Add(replay);
-                        loadedReplayPaths.Add(filepath);
+                    } else {
+                        Debug.Log("parsing " + filepath + " failed: " + parseResult);
                     }
                 }
 
@@ -466,7 +430,7 @@ namespace NSMB.UI.MainMenu.Submenus.Replays {
                 noReplaysText.text = "";
             } else {
                 GlobalController.Instance.sfx.PlayOneShot(SoundEffect.UI_Error);
-                UnityEngine.Debug.LogWarning($"[Replay] Failed to parse {filepath} as a replay: {parseResult}");
+                Debug.LogWarning($"[Replay] Failed to parse {filepath} as a replay: {parseResult}");
             }
             yield return null;
         }
@@ -642,7 +606,7 @@ namespace NSMB.UI.MainMenu.Submenus.Replays {
         }
 
         public int SortByStage(ReplayListEntry a, ReplayListEntry b) {
-            var allMaps = QuantumViewUtils.Maps;
+            var allMaps = AssetRepository<Map>.AllAssetRefs;
 
             if (sortAscending) {
                 return
@@ -695,28 +659,30 @@ namespace NSMB.UI.MainMenu.Submenus.Replays {
             return Mathf.Max(1, max - index);
         }
 
-        public List<ReplayListEntry> GetTemporaryReplaysToDelete() {
+        public IList<string> GetTemporaryReplaysToDelete() {
             if (Settings.Instance.generalMaxTempReplays <= 0) {
-                return null;
+                return Array.Empty<string>();
             }
 
-            List<ReplayListEntry> replaysToDelete = new();
-
-            foreach (var replay in temporaryReplays) {
-                if (GetReplaysUntilDeletion(replay) == 1) {
-                    replaysToDelete.Add(replay);
-                }
-            }
-
-            return replaysToDelete;
+            return Directory.EnumerateFiles(TempDirectory, "*.mvlreplay")
+                .OrderBy(path => {
+                    try {
+                        return File.GetLastWriteTime(path);
+                    } catch {
+                        return default;
+                    }
+                })
+                .Skip(Settings.Instance.generalMaxTempReplays)
+                .ToList();
         }
 
         public class ReplayDateComparer : IComparer<ReplayListEntry> {
             public int Compare(ReplayListEntry x, ReplayListEntry y) {
-                if (x.ReplayFile.Header.UnixTimestamp == y.ReplayFile.Header.UnixTimestamp) {
+                try {
+                    return File.GetLastWriteTime(x.ReplayFile.FilePath).CompareTo(y.ReplayFile.FilePath);
+                } catch {
                     return 0;
                 }
-                return x.ReplayFile.Header.UnixTimestamp < y.ReplayFile.Header.UnixTimestamp ? 1 : -1;
             }
         }
     }

@@ -3,7 +3,7 @@ using Quantum;
 using System;
 using System.Collections.Generic;
 
-public class ProjectileAsset : AssetObject, ISoundEffectOverrideProvider {
+public class ProjectileAsset : AssetObject, ISoundOverrideProvider {
     public ProjectileEffectType Effect;
     public bool Bounce = true;
     public FP Speed;
@@ -22,7 +22,7 @@ public class ProjectileAsset : AssetObject, ISoundEffectOverrideProvider {
     public SoundEffectOverride[] SfxOverrides;
 
     [NonSerialized] private Dictionary<SoundEffect, SoundEffectOverride> overridesDict;
-    public override void Loaded(IResourceManager resourceManager) {
+    public override void Loaded(IResourceManager resourceManager, Native.Allocator allocator) {
         overridesDict = new();
         if (SfxOverrides != null) {
             foreach (var @override in SfxOverrides) {
@@ -30,7 +30,8 @@ public class ProjectileAsset : AssetObject, ISoundEffectOverrideProvider {
             }
         }
     }
-    public SoundEffectOverride GetOverrideForSfx(SoundEffect sfx) {
+
+    public SoundEffectOverride GetOverride(SoundEffect sfx) {
         overridesDict.TryGetValue(sfx, out var result);
         return result;
     }

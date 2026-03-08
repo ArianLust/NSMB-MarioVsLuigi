@@ -1,4 +1,5 @@
 using NSMB.Sound;
+using NSMB.Utilities;
 using NSMB.Utilities.Components;
 using NSMB.Utilities.Extensions;
 using Quantum;
@@ -12,8 +13,11 @@ namespace NSMB.Entities.Enemies {
         [SerializeField] private SpriteRenderer sRenderer;
         [SerializeField] private Sprite deadSprite;
         [SerializeField] private GameObject specialKillParticle;
+        [SerializeField] private GameObject respawnParticle;
         [SerializeField] private LegacyAnimateSpriteRenderer legacyAnimation;
         [SerializeField] private SoundEffectPlayer sfx;
+
+        private GameObject activeRespawnParticle;
 
         public void OnValidate() {
             this.SetIfNull(ref sRenderer, UnityExtensions.GetComponentType.Children);
@@ -24,6 +28,9 @@ namespace NSMB.Entities.Enemies {
         public void Start() {
             QuantumEvent.Subscribe<EventEnemyKilled>(this, OnEnemyKilled, FilterOutReplayFastForward);
             QuantumEvent.Subscribe<EventPlayComboSound>(this, OnPlayComboSound, FilterOutReplayFastForward);
+            QuantumEvent.Subscribe<EventEnemyRespawnSparkles>(this, OnEnemyRespawnSparkles, FilterOutReplayFastForward);
+            QuantumEvent.Subscribe<EventEnemyAfterDelayedRespawn>(this, OnEnemyAfterDelayedRespawn, FilterOutReplayFastForward);
+            QuantumEvent.Subscribe<EventEnemySufferedOffscreen>(this, OnEnemySufferedOffscreen, FilterOutReplayFastForward);
         }
 
         public override unsafe void OnUpdateView() {
@@ -64,7 +71,7 @@ namespace NSMB.Entities.Enemies {
                 return;
             }
 
-            sfx.PlayOneShot(QuantumUtils.GetComboSoundEffect(e.Combo));
+            sfx.PlayOneShot(QuantumViewUtils.GetComboSoundEffect(e.Combo));
         }
 
         private void OnEnemyKilled(EventEnemyKilled e) {
@@ -72,9 +79,48 @@ namespace NSMB.Entities.Enemies {
                 return;
             }
 
-            if (e.KillReason == KillReason.Groundpounded) {
+            if (e.KillReason == EnemyKillReason.Groundpounded) {
                 Instantiate(specialKillParticle, transform.position + Vector3.up * 0.2f, Quaternion.identity);
             }
+        }
+        
+        private void OnEnemyAfterDelayedRespawn(EventEnemyAfterDelayedRespawn e) {
+            if (e.Entity != EntityRef) {
+                return;
+            }
+            Frame f = PredictedFrame;
+
+            var enemy = f.Unsafe.GetPointer<Enemy>(EntityRef);
+
+            Instantiate(Enums.PrefabParticle.Enemy_Puff.GetGameObject(), enemy->Spawnpoint.ToUnityVector3() + (Vector3.up * 0.25f), Quaternion.identity);
+        }
+
+        private void OnEnemyRespawnSparkles(EventEnemyRespawnSparkles e) {
+            if (e.Entity != EntityRef) {
+                return;
+            }
+            Frame f = PredictedFrame;
+
+            var enemy = f.Unsafe.GetPointer<Enemy>(EntityRef);
+            activeRespawnParticle = Instantiate(respawnParticle, enemy->Spawnpoint.ToUnityVector3() + (Vector3.up * 0.25f), Quaternion.identity);
+            foreach (ParticleSystem particle in activeRespawnParticle.GetComponentsInChildren<ParticleSystem>()) {
+                var main = particle.main;
+                main.startColor = Color.saddleBrown;
+            }
+
+            sfx.PlayOneShot(SoundEffect.Player_Sound_Respawn);
+        }
+
+        private void OnEnemySufferedOffscreen(EventEnemySufferedOffscreen e) {
+            if (e.Entity != EntityRef) {
+                return;
+            }
+
+            Frame f = PredictedFrame;
+
+            var enemy = f.Unsafe.GetPointer<Enemy>(EntityRef);
+
+            Instantiate(Enums.PrefabParticle.Enemy_Puff.GetGameObject(), enemy->Spawnpoint.ToUnityVector3() + (Vector3.up * 0.25f), Quaternion.identity);
         }
     }
 }

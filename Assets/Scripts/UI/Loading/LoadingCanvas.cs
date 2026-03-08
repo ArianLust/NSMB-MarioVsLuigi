@@ -50,7 +50,7 @@ namespace NSMB.UI.Loading {
                 return;
             }
 
-            CharacterAsset character = QuantumViewUtils.Characters[0];
+            AssetRef<CharacterAsset> characterRef = default;
             if (game != null) {
                 Frame f = game.Frames.Predicted;
                 List<PlayerRef> localPlayers = game.GetLocalPlayers();
@@ -59,15 +59,20 @@ namespace NSMB.UI.Loading {
                     var playerData = QuantumUtils.GetPlayerData(f, player);
 
                     if (playerData != null) {
-                        character = QuantumViewUtils.FindAssetOrFirst(playerData->Character);
-                    } else {
-                        character = QuantumViewUtils.FindAssetOrFirst(Settings.Instance.generalCharacter);
+                        characterRef = playerData->Character;
                     }
                 }
             }
+            if (characterRef == default) {
+                characterRef = Settings.Instance.generalCharacter;
+            }
+
+            CharacterAsset character = FindAssetOrDefault(characterRef, GlobalController.Instance.defaultCharacter);
 
             mario.Initialize(character);
             readyImage.sprite = character.ReadySprite;
+
+            GlobalController.Instance.fader.SetRespawnStyleSilhouetteSprite(character.SilhouetteSprite);
 
             readyGroup.gameObject.SetActive(false);
             gameObject.SetActive(true);
@@ -87,6 +92,10 @@ namespace NSMB.UI.Loading {
 
             fadeVolumeCoroutine = StartCoroutine(FadeVolume(0.1f, true));
             running = true;
+        }
+
+        public void OnDestroy() {
+            NetworkHandler.OnError -= OnError;
         }
 
         private void OnUnitySceneLoadBegin(CallbackUnitySceneLoadBegin e) {
@@ -177,7 +186,14 @@ namespace NSMB.UI.Loading {
             gameObject.SetActive(false);
         }
 
+        public void AfterReadyFadeTakeover() {
+            GlobalController.Instance.fader.Fade(AnimatedFader.FadeStyle.Dissolve, AnimatedFader.FadeStyle.Respawn, EndAnimation);
+        }
+
         private void OnError(string key, bool network) {
+            if (!this) {
+                return;
+            }
             EndAnimation();
         }
 

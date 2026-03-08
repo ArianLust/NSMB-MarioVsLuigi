@@ -1,13 +1,13 @@
 #define _8_50 8.5
+#define MaxStarSpawns 64
 
 global {
 	ushort BigStarSpawnTimer;
 	EntityRef MainBigStar;
-	bitset[64] UsedStarSpawns;
-	int UsedStarSpawnCount;
+	bitset[MaxStarSpawns] UsedStarSpawns;
 }
 
-table component BigStar {
+component BigStar {
 	bool IsStationary;
 	ushort Lifetime;
 	byte UncollectableFrames;

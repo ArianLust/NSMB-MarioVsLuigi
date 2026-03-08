@@ -1,4 +1,5 @@
 using NSMB.Sound;
+using NSMB.Utilities;
 using NSMB.Utilities.Extensions;
 using Quantum;
 using UnityEngine;
@@ -30,6 +31,9 @@ namespace NSMB.Entities.Enemies {
         public void Start() {
             QuantumEvent.Subscribe<EventBooBecomeActive>(this, OnBooBecameActive, FilterOutReplayFastForward);
             QuantumEvent.Subscribe<EventPlayComboSound>(this, OnPlayComboSound, FilterOutReplayFastForward);
+            QuantumEvent.Subscribe<EventEnemyRespawnSparkles>(this, OnEnemyRespawnSparkles, FilterOutReplayFastForward);
+            QuantumEvent.Subscribe<EventEnemyAfterDelayedRespawn>(this, OnEnemyAfterDelayedRespawn, FilterOutReplayFastForward);
+
         }
 
         public override void OnUpdateView() {
@@ -38,8 +42,11 @@ namespace NSMB.Entities.Enemies {
 
             bobber.localPosition = new(0, Mathf.Sin(2 * Mathf.PI * time * sinSpeed) * sinAmplitude);
 
-            var boo = f.Unsafe.GetPointer<Boo>(EntityRef);
-            var enemy = f.Unsafe.GetPointer<Enemy>(EntityRef);
+            if (!f.Unsafe.TryGetPointer(EntityRef, out Boo* boo)
+                || !f.Unsafe.TryGetPointer(EntityRef, out Enemy* enemy)) {
+
+                return;
+            }
 
             animator.SetBool(ParamFacingRight, enemy->FacingRight);
             animator.SetBool(ParamScared, boo->UnscaredFrames > 0);
@@ -65,7 +72,34 @@ namespace NSMB.Entities.Enemies {
                 return;
             }
 
-            sfx.PlayOneShot(QuantumUtils.GetComboSoundEffect(e.Combo));
+            sfx.PlayOneShot(QuantumViewUtils.GetComboSoundEffect(e.Combo));
+        }
+
+        private unsafe void OnEnemyRespawnSparkles(EventEnemyRespawnSparkles e) {
+            if (e.Entity != EntityRef) {
+                return;
+            }
+
+            Frame f = PredictedFrame;
+
+            var enemy = f.Unsafe.GetPointer<Enemy>(EntityRef);
+
+            Instantiate(Enums.PrefabParticle.Enemy_Puff.GetGameObject(), enemy->Spawnpoint.ToUnityVector3() + (Vector3.up * 0.25f), Quaternion.identity);
+
+            // play boo laugh as warning
+            sfx.PlayOneShot(SoundEffect.Enemy_Boo_Laugh);
+        }
+
+        private unsafe void OnEnemyAfterDelayedRespawn(EventEnemyAfterDelayedRespawn e) {
+            if (e.Entity != EntityRef) {
+                return;
+            }
+
+            Frame f = PredictedFrame;
+
+            var enemy = f.Unsafe.GetPointer<Enemy>(EntityRef);
+
+            Instantiate(Enums.PrefabParticle.Enemy_Puff.GetGameObject(), enemy->Spawnpoint.ToUnityVector3() + (Vector3.up * 0.25f), Quaternion.identity);
         }
     }
 }

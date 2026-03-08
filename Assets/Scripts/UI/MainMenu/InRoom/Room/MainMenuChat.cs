@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using Photon.Deterministic;
 
 namespace NSMB.UI.MainMenu.Submenus.InRoom {
 
@@ -179,8 +180,8 @@ namespace NSMB.UI.MainMenu.Submenus.InRoom {
             }
 
             var startTypingCommand = new CommandStartTyping();
-            foreach (var player in game.GetLocalPlayerSlots()) {
-                game.SendCommand(player, startTypingCommand);
+            foreach (var slot in game.GetLocalPlayerSlots()) {
+                game.SendCommand(slot, startTypingCommand);
             }
         }
 

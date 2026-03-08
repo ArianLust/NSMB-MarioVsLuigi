@@ -1,6 +1,5 @@
 using NSMB.Quantum;
 using NSMB.UI.Game;
-using NSMB.UI.Options;
 using NSMB.UI.Translation;
 using NSMB.Utilities.Extensions;
 using Quantum;
@@ -104,7 +103,6 @@ namespace NSMB.UI.Pause {
             confirmationPrompt.SetActive(false);
 
             main.SetActive(true);
-            inputCollector.IsPaused = true;
             isPaused = true;
 
             if (playSound) {
@@ -121,7 +119,6 @@ namespace NSMB.UI.Pause {
             TranslationManager.OnLanguageChanged -= OnLanguageChanged;
 
             main.SetActive(false);
-            inputCollector.IsPaused = false;
             isPaused = false;
 
             if (playSound) {
@@ -234,12 +231,10 @@ namespace NSMB.UI.Pause {
             } else {
                 var game = QuantumRunner.DefaultGame;
                 Frame f = game.Frames.Predicted;
-                PlayerRef hostPlayer = f.Global->Host;
+                PlayerRef host = f.Global->Host;
 
-                int index = game.GetLocalPlayers().IndexOf(hostPlayer);
-                if (index != -1) {
-                    int slot = game.GetLocalPlayerSlots()[index];
-                    game.SendCommand(slot, new CommandHostEndGame());
+                if (game.PlayerIsLocal(host)) {
+                    game.SendCommand(game.GetLocalPlayerSlots()[game.GetLocalPlayers().IndexOf(host)], new CommandHostEndGame());
                 }
             }
             Unpause(false);

@@ -2,9 +2,11 @@ using NSMB.Quantum;
 using NSMB.Replay;
 using NSMB.UI.Game;
 using NSMB.UI.Loading;
+using NSMB.Utilities;
 using NSMB.Utilities.Extensions;
 using Quantum;
 using UnityEngine;
+using UnityEngine.Audio;
 using static NSMB.Utilities.QuantumViewUtils;
 
 namespace NSMB.Sound {
@@ -12,6 +14,7 @@ namespace NSMB.Sound {
 
         //---Serialized Variables
         [SerializeField] private LoopingMusicPlayer musicPlayer;
+        [SerializeField] private AudioMixer mixer; 
 
         public void OnValidate() {
             this.SetIfNull(ref musicPlayer);
@@ -27,6 +30,7 @@ namespace NSMB.Sound {
 
             ActiveReplayManager.OnReplayFastForwardEnded += OnReplayFastForwardEnded;
             LoadingCanvas.OnLoadingEnded += OnLoadingEnded;
+            AudioMixerManager.OnAudioMixerValueChanged += OnAudioMixerValueChanged;
 
             var game = QuantumRunner.DefaultGame;
             Frame f;
@@ -42,6 +46,7 @@ namespace NSMB.Sound {
         public void OnDestroy() {
             ActiveReplayManager.OnReplayFastForwardEnded -= OnReplayFastForwardEnded;
             LoadingCanvas.OnLoadingEnded -= OnLoadingEnded;
+            AudioMixerManager.OnAudioMixerValueChanged -= OnAudioMixerValueChanged;
         }
 
         public void OnUpdateView(CallbackUpdateView e) {
@@ -52,7 +57,7 @@ namespace NSMB.Sound {
 
         public void HandleMusic(QuantumGame game, bool force) {
             Frame f = game.Frames.Predicted;
-            var rules = f.Global->Rules;
+            ref var rules = ref f.Global->Rules;
 
             if (!force && !musicPlayer.IsPlaying) {
                 return;
@@ -62,47 +67,16 @@ namespace NSMB.Sound {
             bool mega = false;
             bool speedup = false;
 
-            var allPlayers = f.Filter<MarioPlayer>();
-            allPlayers.UseCulling = false;
-
-            int playersWithOneLife = 0;
-            while (allPlayers.NextUnsafe(out EntityRef entity, out MarioPlayer* mario)) {
-                if (rules.IsLivesEnabled && mario->Lives == 0) {
-                    continue;
-                }
-                if (rules.IsLivesEnabled && mario->Lives == 1) {
-                    playersWithOneLife++;
-                }
-
-                bool isSpectateTarget = false;
-                foreach (var playerElement in PlayerElements.AllPlayerElements) {
-                    if (playerElement.Entity == entity) {
-                        isSpectateTarget = true;
-                        break;
-                    }
-                }
-
-                if (!game.PlayerIsLocal(mario->PlayerRef) && !isSpectateTarget) {
-                    continue;
-                }
-
-                speedup |= rules.IsLivesEnabled && mario->Lives == 1;
-                mega |= Settings.Instance.audioSpecialPowerupMusic.HasFlag(Enums.SpecialPowerupMusic.MegaMushroom) && mario->MegaMushroomFrames > 0;
-                invincible |= Settings.Instance.audioSpecialPowerupMusic.HasFlag(Enums.SpecialPowerupMusic.Starman) && mario->IsStarmanInvincible;
+            if (f.TryFindAsset(f.Global->Rules.Gamemode, out var gamemode)) {
+                speedup = gamemode.IsFastMusicEnabled(f);
             }
 
-            speedup |= rules.IsTimerEnabled && f.Global->Timer <= 60;
-
-            var gamemode = f.FindAsset(f.Global->Rules.Gamemode);
-            if (gamemode is StarChasersGamemode) {
-                speedup |= gamemode.GetFirstPlaceObjectiveCount(f) >= rules.StarsToWin - 1;
-            }
-
-            if (!speedup && rules.IsLivesEnabled) {
-                // Also speed up the music if:
-                // A: two players left, at least one has one life
-                // B: three+ players left, all have one life
-                speedup |= (f.Global->RealPlayers <= 2 && playersWithOneLife > 0) || (playersWithOneLife >= f.Global->RealPlayers);
+            foreach ((var entity, var mario) in f.Unsafe.GetComponentBlockIterator<MarioPlayer>()) {
+                if (mario->IsValid(f) && IsMarioLocal(entity)) {
+                    speedup |= rules.IsLivesEnabled && mario->Lives == 1;
+                    mega |= Settings.Instance.audioSpecialPowerupMusic.HasFlag(Enums.SpecialPowerupMusic.MegaMushroom) && mario->MegaMushroomFrames > 0;
+                    invincible |= Settings.Instance.audioSpecialPowerupMusic.HasFlag(Enums.SpecialPowerupMusic.Starman) && mario->IsStarmanInvincible;
+                }
             }
 
             VersusStageData stage = ViewContext.Stage;
@@ -149,6 +123,10 @@ namespace NSMB.Sound {
             if (!longIntro && Game != null) {
                 HandleMusic(Game, true);
             }
+        }
+
+        private void OnAudioMixerValueChanged(string key, float value) {
+            mixer.SetFloat(key, value);
         }
 
         private void OnGameStateChanged(EventGameStateChanged e) {

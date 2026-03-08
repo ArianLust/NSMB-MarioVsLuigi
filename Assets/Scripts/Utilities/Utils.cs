@@ -1,3 +1,4 @@
+using NSMB.UI.Game;
 using NSMB.Utilities.Extensions;
 using Quantum;
 using System;
@@ -8,11 +9,11 @@ using UnityEngine;
 namespace NSMB.Utilities {
     public class Utils {
 
-        public static T IndexIntoArrayOrFirstElement<T>(T[] array, int index) {
-            if (index < 0 || index >= array.Length) {
-                return array[0];
+        public static T IndexIntoOrFirstElement<T>(IList<T> list, int index) {
+            if (index < 0 || index >= list.Count) {
+                return list[0];
             }
-            return array[index];
+            return list[index];
         }
 
         public static bool BitTest(long v, int index) {
@@ -155,54 +156,17 @@ namespace NSMB.Utilities {
             return symbolStringBuilder.ToString();
         }
 
-        private static readonly Color spectatorColor = new(0.8f, 0.8f, 0.8f, 0.7f);
-        public unsafe static Color GetPlayerColor(Frame f, PlayerRef player, float s = 1, float v = 1, bool considerDisqualifications = true) {
-            if (f == null || player == PlayerRef.None) {
-                return spectatorColor;
-            }
-
-            // Prioritize spectator status
-            if (!f.TryResolveDictionary(f.Global->PlayerDatas, out var playerDataDict)
-                || !playerDataDict.TryGetValue(player, out EntityRef playerDataEntity)
-                || !f.Unsafe.TryGetPointer(playerDataEntity, out PlayerData* playerData)
-                || playerData->IsSpectator) {
-
-                return spectatorColor;
-            }
-
-            // Or dead marios
-            if (f.Global->GameState > GameState.WaitingForPlayers && considerDisqualifications) {
-                var marioFilter = f.Filter<MarioPlayer>();
-                marioFilter.UseCulling = false;
-                MarioPlayer* existingMario = null;
-                while (marioFilter.NextUnsafe(out _, out MarioPlayer* mario)) {
-                    if (mario->PlayerRef == player) {
-                        existingMario = mario;
-                        break;
-                    }
-                }
-
-                if (existingMario == null
-                    || (f.Global->GameState >= GameState.Playing && f.Global->Rules.IsLivesEnabled && existingMario->Lives <= 0)) {
-                    return spectatorColor;
-                }
-            }
-
-            // Then team
-            if (f.Global->Rules.TeamsEnabled) {
-                return GetTeamColor(f, f.Global->GameState == GameState.PreGameRoom ? playerData->RequestedTeam : playerData->RealTeam, s, v);
-            }
-
-            // Then id based color
+        public static unsafe int? GetPlayerIndex(Frame f, PlayerRef player) {
             int ourIndex = 0;
             int totalPlayers = 0;
             if (f.Global->GameState == GameState.PreGameRoom) {
                 // use PlayerData here
                 PlayerData* ourPlayerData = QuantumUtils.GetPlayerData(f, player);
+                if (ourPlayerData == null) {
+                    return null;
+                }
 
-                var playerFilter = f.Filter<PlayerData>();
-                playerFilter.UseCulling = false;
-                while (playerFilter.NextUnsafe(out _, out PlayerData* otherPlayerData)) {
+                foreach ((_, var otherPlayerData) in f.Unsafe.GetComponentBlockIterator<PlayerData>()) { 
                     if (otherPlayerData->IsSpectator) {
                         continue;
                     }
@@ -226,11 +190,69 @@ namespace NSMB.Utilities {
 
                 if (ourIndex == -1) {
                     // Spectator
+                    return null;
+                }
+            }
+
+            // Mathf.Max makes it so 2 players uses indices 0 and 3, for red and green.
+            return Mathf.CeilToInt(((float) ourIndex / Mathf.Max(totalPlayers + 1, 4)) * GlobalController.Instance.playerSlots.Length);
+        }
+
+        public static PlayerSlotInfo GetPlayerSlotInfo(Frame f, PlayerRef player) {
+            int? index = GetPlayerIndex(f, player);
+            var slots = GlobalController.Instance.playerSlots;
+            return index.HasValue && index < slots.Length ? slots[index.Value] : null;
+        }
+
+        public static string GetPlayerIcon(Frame f, PlayerRef player) {
+            var slot = GetPlayerSlotInfo(f, player);
+            if (slot) {
+                return slot.Icon;
+            } else {
+                return "";
+            }
+        }
+
+        private static readonly Color spectatorColor = new(0.8f, 0.8f, 0.8f, 0.7f);
+        public unsafe static Color GetPlayerColor(Frame f, PlayerRef player, float s = 1, float v = 1, bool considerDisqualifications = true) {
+            if (f == null || player == PlayerRef.None) {
+                return spectatorColor;
+            }
+
+            // Prioritize spectator status
+            var playerData = QuantumUtils.GetPlayerData(f, player);
+            if (playerData != null && playerData->IsSpectator) {
+                return spectatorColor;
+            }
+
+            // Or dead marios
+            if (f.Global->GameState > GameState.WaitingForPlayers && considerDisqualifications) {
+                MarioPlayer* existingMario = null;
+                foreach ((_, var mario) in f.Unsafe.GetComponentBlockIterator<MarioPlayer>()) {
+                    if (mario->PlayerRef == player) {
+                        existingMario = mario;
+                        break;
+                    }
+                }
+
+                if (existingMario == null
+                    || (f.Global->GameState >= GameState.Playing && !existingMario->IsValid(f))) {
                     return spectatorColor;
                 }
             }
 
-            return Color.HSVToRGB(ourIndex / (totalPlayers + 1f), s, v);
+            // Then team
+            if (f.Global->Rules.TeamsEnabled) {
+                return GetTeamColor(f, f.Global->GameState == GameState.PreGameRoom ? playerData->RequestedTeam : playerData->RealTeam);
+            }
+
+            // Then id based color
+            var slot = GetPlayerSlotInfo(f, player);
+            if (slot) {
+                return slot.GetModifiedColor(s, v);
+            } else {
+                return spectatorColor;
+            }
         }
 
         public static Color GetTeamColor(Frame f, int team, float s = 1, float v = 1) {

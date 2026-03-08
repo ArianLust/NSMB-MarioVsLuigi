@@ -123,10 +123,11 @@ namespace NSMB.Tiles {
 
         private void OnTileChanged(EventTileChanged e) {
             Vector3Int coords = (Vector3Int) e.Position.ToVector2Int();
-            Vector2 scale = new Vector2 {
-                x = e.NewTile.Flags.HasFlag(StageTileFlags.MirrorX) ? -1 : 1,
-                y = e.NewTile.Flags.HasFlag(StageTileFlags.MirrorY) ? -1 : 1,
-            };
+            Vector3 scale = new(
+                e.NewTile.Flags.HasFlag(StageTileFlags.MirrorX) ? -1 : 1,
+                e.NewTile.Flags.HasFlag(StageTileFlags.MirrorY) ? -1 : 1,
+                1
+            );
 
             var tile = QuantumUnityDB.GetGlobalAsset(e.NewTile.Tile);
             TileBase unityTile = tile ? tile.Tile : null;
@@ -169,13 +170,22 @@ namespace NSMB.Tiles {
                 entityBreakBlockSounds[e.Entity] = sfx;
             }
 
-            if (e.BrokenByMega && e.BreakSpeed != FP._0) {
-                var bazingaParticle = particle.velocityOverLifetime;
-                bazingaParticle.x = new ParticleSystem.MinMaxCurve(e.BreakSpeed.AsFloat);
-                bazingaParticle.enabled = true;
-                var bazongaParticle = particle.rotationOverLifetime;
-                bazongaParticle.x = new ParticleSystem.MinMaxCurve(e.BreakSpeed.AsFloat * 360f);
-                bazongaParticle.enabled = true;
+            if (e.BrokenByMega) {
+                float speed = e.Direction switch {
+                    InteractionDirection.Left => -9.5f,
+                    InteractionDirection.Right => 9.5f,
+                    _ => 0
+                };
+
+                if (speed != 0) {
+                    var velocityComponent = particle.velocityOverLifetime;
+                    velocityComponent.x = new ParticleSystem.MinMaxCurve(speed);
+                    velocityComponent.enabled = true;
+
+                    var rotationComponent = particle.rotationOverLifetime;
+                    rotationComponent.x = new ParticleSystem.MinMaxCurve(speed * 360f);
+                    rotationComponent.enabled = true;
+                }
             }
 
             particle.Play();

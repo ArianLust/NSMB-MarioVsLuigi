@@ -1071,35 +1071,35 @@ Tilemap:
   - m_RefCount: 57
     m_Data: {r: 1, g: 1, b: 1, a: 1}
   - m_RefCount: 8
-    m_Data: {r: 0.75936365, g: 0.3179637, b: 0.3190729, a: 1}
+    m_Data: {r: 0.8859683, g: 0.44868246, b: 0.5132341, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.76656616, g: 0.3914213, b: 0.39535975, a: 1}
+    m_Data: {r: 0.9626435, g: 0.66739917, b: 0.7006725, a: 1}
   - m_RefCount: 0
-    m_Data: {r: 1.65e-43, g: 1.65e-43, b: 1.65e-43, a: 1.65e-43}
+    m_Data: {r: 1.67e-43, g: 1.67e-43, b: 1.67e-43, a: 1.67e-43}
   - m_RefCount: 1
-    m_Data: {r: 0.85409105, g: 0.5141091, b: 0.5977342, a: 1}
+    m_Data: {r: 0.754313, g: 0.4427327, b: 0.45905122, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.9148363, g: 0.5125029, b: 0.61991334, a: 1}
+    m_Data: {r: 0.8436344, g: 0.3818876, b: 0.50343317, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.853164, g: 0.3421072, b: 0.35596615, a: 1}
+    m_Data: {r: 0.79287195, g: 0.43809402, b: 0.54881847, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.9414761, g: 0.57065105, b: 0.5989585, a: 1}
+    m_Data: {r: 0.9712311, g: 0.61118567, b: 0.68530846, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.98195416, g: 0.5962697, b: 0.6325091, a: 1}
+    m_Data: {r: 0.9521715, g: 0.5768336, b: 0.68736255, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.79422295, g: 0.4817979, b: 0.48232454, a: 1}
+    m_Data: {r: 0.90162635, g: 0.522802, b: 0.5240272, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.96386826, g: 0.5603089, b: 0.6361154, a: 1}
+    m_Data: {r: 0.9325747, g: 0.56341267, b: 0.5931093, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.9222491, g: 0.4617045, b: 0.58074695, a: 1}
+    m_Data: {r: 0.87370694, g: 0.40644103, b: 0.5232945, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.9402048, g: 0.6207822, b: 0.6526888, a: 1}
+    m_Data: {r: 0.7549193, g: 0.51181567, b: 0.57128304, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.77446604, g: 0.43401593, b: 0.54603815, a: 1}
+    m_Data: {r: 0.8638371, g: 0.572809, b: 0.61931515, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.91814226, g: 0.39777786, b: 0.49992368, a: 1}
+    m_Data: {r: 0.86169714, g: 0.48691168, b: 0.57561487, a: 1}
   - m_RefCount: 1
-    m_Data: {r: 0.7298594, g: 0.45534417, b: 0.5325124, a: 1}
+    m_Data: {r: 0.8232328, g: 0.49383283, b: 0.49861136, a: 1}
   m_TileObjectToInstantiateArray: []
   m_AnimationFrameRate: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -1126,6 +1126,7 @@ Tilemap:
     e33: 1
 --- !u!483693784 &8165369504424054976
 TilemapRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -1144,6 +1145,8 @@ TilemapRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -1165,9 +1168,11 @@ TilemapRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_ChunkSize: {x: 32, y: 32, z: 32}
   m_ChunkCullingBounds: {x: 0, y: 0, z: 0}
   m_MaxChunkCount: 16
@@ -1175,7 +1180,6 @@ TilemapRenderer:
   m_SortOrder: 0
   m_Mode: 0
   m_DetectChunkCullingBounds: 0
-  m_MaskInteraction: 0
 --- !u!114 &8349534929816548183
 MonoBehaviour:
   m_ObjectHideFlags: 0

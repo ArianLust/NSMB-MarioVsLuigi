@@ -585,7 +585,7 @@ namespace Quantum.Profiling {
     /// Add a value to the series.
     /// </summary>
     /// <param name="value">Value to record</param>
-    protected virtual void AddValue(float value) {
+    protected void AddValue(float value) {
       if (IsActive == false)
         return;
 

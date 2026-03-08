@@ -1,10 +1,9 @@
-using NSMB.UI.Game;
+using NSMB.Sound;
 using NSMB.Utilities;
 using Quantum;
 using System;
 using System.IO;
 using UnityEngine;
-using UnityEngine.Audio;
 using UnityEngine.InputSystem;
 
 namespace NSMB {
@@ -13,8 +12,7 @@ namespace NSMB {
         //---Static Variables
         private static Controls _controls;
         public static Controls Controls => _controls;
-        private Action[] VersionUpdaters;
-        public static event Action OnColorblindModeChanged, OnDisableChatChanged, OnNdsResolutionSettingChanged;
+        public static event Action OnColorblindModeChanged, OnNametagVisibilityChanged, OnDisableChatChanged, OnNdsResolutionSettingChanged, OnDiscordIntegrationChanged;
         public static event Action<bool> OnInputDisplayActiveChanged, OnReplaysEnabledChanged;
 
         //---Properties
@@ -58,7 +56,7 @@ namespace NSMB {
             get => _generalDiscordIntegration;
             set {
                 _generalDiscordIntegration = value;
-                GlobalController.Instance.discordController.UpdateActivity();
+                OnDiscordIntegrationChanged?.Invoke();
             }
         }
 
@@ -171,9 +169,7 @@ namespace NSMB {
             get => _graphicsPlayerNametags;
             set {
                 _graphicsPlayerNametags = value;
-                foreach (var element in PlayerElements.AllPlayerElements) {
-                    element.nametagCanvas.SetActive(value);
-                }
+                OnNametagVisibilityChanged?.Invoke();
             }
         }
 
@@ -213,7 +209,7 @@ namespace NSMB {
         public AssetRef<CharacterAsset> generalCharacter;
         public AssetRef<PaletteSet> generalPalette;
         public int generalMaxTempReplays;
-        public bool generalScoreboardAlways, generalChatFiltering, generalAddonDownloads, generalUseNicknameColor;
+        public bool generalScoreboardAlways, generalChatFiltering, generalUseNicknameColor;
 
         public bool graphicsNametags;
 
@@ -223,11 +219,10 @@ namespace NSMB {
         public RumbleManager.RumbleSetting controlsRumble;
         public bool controlsFireballSprint, controlsAutoSprint, controlsPropellerJump, controlsAllowGroundpoundWithLeftRight;
 
-        public bool miscFilterFullRooms, miscFilterInProgressRooms;
+        public bool miscFilterFullRooms, miscFilterInProgressRooms, miscFilterAddons;
 
         //---Private Variables
-        [SerializeField] private AudioMixer mixer;
-
+        private Action[] VersionUpdaters;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSplashScreen)]
         public static void CreateInstance() {
@@ -249,7 +244,6 @@ namespace NSMB {
             PlayerPrefs.SetInt("General_ScoreboardAlwaysVisible", generalScoreboardAlways ? 1 : 0);
             PlayerPrefs.SetInt("General_DisableChat", GeneralDisableChat ? 1 : 0);
             PlayerPrefs.SetInt("General_ChatFilter", generalChatFiltering ? 1 : 0);
-            PlayerPrefs.SetInt("General_AddonDownloads", generalAddonDownloads ? 1 : 0);
             PlayerPrefs.SetString("General_Character", generalCharacter.Id.ToString());
             PlayerPrefs.SetString("General_Palette", generalPalette.Id.ToString());
             PlayerPrefs.SetString("General_Locale", GeneralLocale);
@@ -292,14 +286,16 @@ namespace NSMB {
             // Misc
             PlayerPrefs.SetInt("Misc_FilterFullRooms", miscFilterFullRooms ? 1 : 0);
             PlayerPrefs.SetInt("Misc_FilterInProgressRooms", miscFilterInProgressRooms ? 1 : 0);
+            PlayerPrefs.SetInt("Misc_FilterAddons", miscFilterAddons ? 1 : 0);
 
             PlayerPrefs.Save();
         }
 
         public void ApplyVolumeSettings() {
-            mixer.SetFloat("MasterVolume", Mathf.Log10(AudioMasterVolume) * 20);
-            mixer.SetFloat("MusicVolume", Mathf.Log10(AudioMusicVolume) * 20);
-            mixer.SetFloat("SoundVolume", Mathf.Log10(AudioSFXVolume) * 20);
+            var mixerManager = GlobalController.Instance.audioMixerManager;
+            mixerManager.SetFloat(AudioMixerManager.KeyMaster, Mathf.Log10(AudioMasterVolume) * 20);
+            mixerManager.SetFloat(AudioMixerManager.KeyMusic, Mathf.Log10(AudioMusicVolume) * 20);
+            mixerManager.SetFloat(AudioMixerManager.KeySfx, Mathf.Log10(AudioSFXVolume) * 20);
         }
 
         public void LoadSettings() {
@@ -330,9 +326,8 @@ namespace NSMB {
             generalScoreboardAlways = PlayerPrefs.GetInt("ScoreboardAlwaysVisible", 1) != 0;
             GeneralDisableChat = false;
             generalChatFiltering = PlayerPrefs.GetInt("ChatFilter", 1) != 0;
-            generalAddonDownloads = true;
-            generalCharacter = Utils.IndexIntoArrayOrFirstElement(QuantumViewUtils.Characters, PlayerPrefs.GetInt("Character", 0));
-            generalPalette = Utils.IndexIntoArrayOrFirstElement(QuantumViewUtils.Palettes, PlayerPrefs.GetInt("Skin", 0));
+            generalCharacter = Utils.IndexIntoOrFirstElement(AssetRepository<CharacterAsset>.AllAssetRefs, PlayerPrefs.GetInt("Character", 0));
+            generalPalette = Utils.IndexIntoOrFirstElement(AssetRepository<PaletteSet>.AllAssetRefs, PlayerPrefs.GetInt("Skin", 0));
             GeneralLocale = "en-US";
             generalUseNicknameColor = true;
             GeneralReplaysEnabled = true;
@@ -373,6 +368,7 @@ namespace NSMB {
 
             miscFilterFullRooms = false;
             miscFilterInProgressRooms = false;
+            miscFilterAddons = false;
 
             MassDeleteKeys("Nickname", "ScoreboardAlwaysVisible", "ChatFilter", "Character", "Skin", "NDSResolution",
                 "NDS4by3", "VSync", "volumeMaster", "volumeMusic", "volumeSFX", "FireballFromSprint");
@@ -384,14 +380,13 @@ namespace NSMB {
             TryGetSetting("General_ScoreboardAlwaysVisible", ref generalScoreboardAlways);
             TryGetSetting<bool>("General_DisableChat", nameof(GeneralDisableChat));
             TryGetSetting("General_ChatFilter", ref generalChatFiltering);
-            TryGetSetting("General_AddonDownloads", ref generalAddonDownloads);
             int generalCharacterOld = 0;
             if (TryGetSetting("General_Character", ref generalCharacterOld)) {
-                generalCharacter = Utils.IndexIntoArrayOrFirstElement(QuantumViewUtils.Characters, generalCharacterOld);
+                generalCharacter = Utils.IndexIntoOrFirstElement(AssetRepository<CharacterAsset>.AllAssetRefs, generalCharacterOld);
             }
             int generalPaletteOld = 0;
             if (TryGetSetting("General_Palette", ref generalPaletteOld)) {
-                generalPalette = Utils.IndexIntoArrayOrFirstElement(QuantumViewUtils.Palettes, generalPaletteOld);
+                generalPalette = Utils.IndexIntoOrFirstElement(AssetRepository<PaletteSet>.AllAssetRefs, generalPaletteOld);
             }
             TryGetSetting<string>("General_Locale", nameof(GeneralLocale));
             TryGetSetting("General_UseNicknameColor", ref generalUseNicknameColor);
@@ -433,6 +428,7 @@ namespace NSMB {
             // Misc
             TryGetSetting("Misc_FilterFullRooms", ref miscFilterFullRooms);
             TryGetSetting("Misc_FilterInProgressRooms", ref miscFilterInProgressRooms);
+            TryGetSetting("Misc_FilterAddons", ref miscFilterAddons);
         }
 
         private void LoadFromVersion2() {
@@ -441,7 +437,6 @@ namespace NSMB {
             TryGetSetting("General_ScoreboardAlwaysVisible", ref generalScoreboardAlways);
             TryGetSetting<bool>("General_DisableChat", nameof(GeneralDisableChat));
             TryGetSetting("General_ChatFilter", ref generalChatFiltering);
-            TryGetSetting("General_AddonDownloads", ref generalAddonDownloads);
             TryGetSetting("General_Character", ref generalCharacter);
             TryGetSetting("General_Palette", ref generalPalette);
             TryGetSetting<string>("General_Locale", nameof(GeneralLocale));
@@ -484,6 +479,7 @@ namespace NSMB {
             // Misc
             TryGetSetting("Misc_FilterFullRooms", ref miscFilterFullRooms);
             TryGetSetting("Misc_FilterInProgressRooms", ref miscFilterInProgressRooms);
+            TryGetSetting("Misc_FilterAddons", ref miscFilterAddons);
         }
 
         private bool TryGetSetting<T>(string key, string propertyName) {

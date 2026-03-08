@@ -14,6 +14,7 @@ namespace NSMB.UI.MainMenu.Submenus.InRoom {
 
         //---Serialized Variables
         [SerializeField] private MainMenuCanvas canvas;
+        [SerializeField] private ProfilePanel panel;
         [SerializeField] private GameObject template, blockerTemplate;
         [SerializeField] public GameObject content;
         [SerializeField] private GameObject selectOnClose;
@@ -36,7 +37,7 @@ namespace NSMB.UI.MainMenu.Submenus.InRoom {
             }
             characterButtons.Clear();
 
-            List<CharacterAsset> characters = QuantumViewUtils.Characters
+            var characters = AssetRepository<CharacterAsset>.AllAssets
                 .OrderBy(ca => ca ? ca.SelectionOrder : int.MinValue)
                 .ToList();
             
@@ -111,6 +112,8 @@ namespace NSMB.UI.MainMenu.Submenus.InRoom {
             Settings.Instance.generalCharacter = selectedCharacter;
             Settings.Instance.SaveSettings();
             canvas.PlayConfirmSound();
+
+            panel.OnCharacterClicked(selectedCharacter);
         }
 
         public void Open() {

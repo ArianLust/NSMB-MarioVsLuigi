@@ -1,9 +1,6 @@
 using Quantum;
 using System.Collections;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
-using UnityEngine.ResourceManagement.AsyncOperations;
-using UnityEngine.ResourceManagement.ResourceProviders;
 using UnityEngine.SceneManagement;
 
 namespace NSMB.Quantum {
@@ -18,7 +15,7 @@ namespace NSMB.Quantum {
         //---Private Variables
         private Coroutine loadingCoroutine;
         private Map currentMap;
-        private SceneInstance? currentAddressablesScene;
+        private Scene currentScene;
 
         public void Start() {
             Instance = this;
@@ -52,7 +49,7 @@ namespace NSMB.Quantum {
                 yield break;
             }
 
-            SceneInstance? previousAddressablesScene = currentAddressablesScene;
+            Scene oldScene = currentScene;
 
             // Load new map
             string newSceneName = newMap ? newMap.Scene : null;
@@ -62,10 +59,10 @@ namespace NSMB.Quantum {
             currentMap = newMap;
 
             // Unload previous map (if available)
-            if (previousAddressablesScene != null) {
+            if (oldScene.IsValid()) {
                 string oldSceneName = oldMap ? oldMap.Scene : null;
                 QuantumCallback.Dispatcher.Publish(new CallbackUnitySceneUnloadBegin(game) { SceneName = oldSceneName });
-                yield return UnloadAddressablesScene(previousAddressablesScene.Value);
+                yield return SceneManager.UnloadSceneAsync(oldScene);
                 QuantumCallback.Dispatcher.Publish(new CallbackUnitySceneUnloadDone(game) { SceneName = oldSceneName });
             }
 
@@ -85,36 +82,25 @@ namespace NSMB.Quantum {
                         yield return null;
                     }
                 }
-                currentAddressablesScene = null;
+                currentScene = default;
                 yield break;
             }
             
             // Check if the scene already is loaded
-            Scene loadedScene = SceneManager.GetSceneByName(map.Scene);
-            if (loadedScene.IsValid()) {
-                yield break;
+            Scene loadedScene = SceneManager.GetSceneByPath(map.ScenePath);
+            if (!loadedScene.IsValid()) {
+#if UNITY_EDITOR
+                var loadOp = UnityEditor.SceneManagement.EditorSceneManager.LoadSceneAsyncInPlayMode(map.ScenePath, new LoadSceneParameters { loadSceneMode = LoadSceneMode.Additive });
+#else
+                var loadOp = SceneManager.LoadSceneAsync(map.ScenePath, LoadSceneMode.Additive);
+#endif
+                loadOp.allowSceneActivation = true;
+                yield return loadOp;
+                loadedScene = SceneManager.GetSceneByPath(map.ScenePath);
             }
 
-            // Load via addressables.
-            AsyncOperationHandle<SceneInstance> addressablesOp = default;
-            try {
-                addressablesOp = Addressables.LoadSceneAsync(map.ScenePath, LoadSceneMode.Additive);
-            } catch { }
-            if (addressablesOp.IsValid()) {
-                while (!addressablesOp.IsDone) {
-                    yield return null;
-                }
-                SceneManager.SetActiveScene(addressablesOp.Result.Scene);
-                currentAddressablesScene = addressablesOp.Result;
-                yield break;
-            }
-        }
-
-        private IEnumerator UnloadAddressablesScene(SceneInstance sceneInstance) {
-            var op = Addressables.UnloadSceneAsync(sceneInstance);
-            while (!op.IsDone) {
-                yield return null;
-            }
+            currentScene = loadedScene;
+            SceneManager.SetActiveScene(currentScene);
         }
     }
 }

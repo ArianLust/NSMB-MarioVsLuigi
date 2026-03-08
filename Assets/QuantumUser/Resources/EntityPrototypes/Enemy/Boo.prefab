@@ -290,7 +290,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   BindBehaviour: 0
   ManualDisposal: 0
-  ViewFlags: 0
+  ViewFlags: 4
   InterpolationMode: 0
   ErrorCorrectionRateMin: 10
   ErrorCorrectionRateMax: 30
@@ -343,6 +343,8 @@ MonoBehaviour:
     IgnorePlayerWhenRespawning:
       Value: 0
     DisableRespawning:
+      Value: 0
+    StayAtHomeWhenOffscreen:
       Value: 0
 --- !u!114 &5623453289331559766
 MonoBehaviour:
@@ -506,6 +508,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &8876538276984424454
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -524,6 +527,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -545,9 +550,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 2
+  m_MaskInteraction: 0
   m_Sprite: {fileID: -360477163, guid: ccf0904a89399d54d91fbeb65e47e4b7, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -557,7 +564,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!95 &4326104160039452375
 Animator:

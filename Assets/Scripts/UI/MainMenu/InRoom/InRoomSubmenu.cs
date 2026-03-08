@@ -85,11 +85,11 @@ namespace NSMB.UI.MainMenu.Submenus.InRoom {
             QuantumEvent.Subscribe<EventGameStateChanged>(this, OnGameStateChanged);
             QuantumEvent.Subscribe<EventHostChanged>(this, OnHostChanged);
             QuantumEvent.Subscribe<EventCountdownTick>(this, OnCountdownTick);
-            QuantumEvent.Subscribe<EventPlayerDataChanged>(this, OnPlayerDataChanged);
+            QuantumEvent.Subscribe<EventPlayerDataChanged>(this, OnPlayerDataChanged, onlyIfActiveAndEnabled: true);
         }
 
         private void OnLocalPlayerAddFailed(CallbackLocalPlayerAddFailed callback) {
-            Debug.Log(callback.Message);
+            Debug.LogError("Failed to add local player! " + callback.Message);
         }
 
         public void OnEnable() {
@@ -247,7 +247,7 @@ namespace NSMB.UI.MainMenu.Submenus.InRoom {
                 foreach (int slot in game.GetLocalPlayerSlots()) {
                     game.SendCommand(slot, new CommandToggleReady());
                 }
-
+                
                 Canvas.PlaySound(ready ? SoundEffect.UI_Back : SoundEffect.UI_Decide);
             }
         }
