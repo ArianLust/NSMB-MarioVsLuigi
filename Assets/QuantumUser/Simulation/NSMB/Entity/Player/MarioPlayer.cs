@@ -1,5 +1,6 @@
 using Photon.Deterministic;
 using System;
+using UnityEngine;
 
 namespace Quantum {
     public unsafe partial struct MarioPlayer {
@@ -91,7 +92,7 @@ namespace Quantum {
 
         public readonly bool IsStarmanInvincible => InvincibilityFrames > 0;
         public readonly bool IsWallsliding => WallslideLeft || WallslideRight;
-        public readonly bool IsCrouchedInShell => CurrentPowerupState == PowerupState.BlueShell && (IsCrouching || (IsGroundpounding && GroundpoundStartFrames == 0)) && !IsInShell;
+        public readonly bool IsCrouchedInShell => CurrentPowerupState == PowerupState.BlueShell && (IsCrouching || IsGroundpounding && GroundpoundStartFrames <= 11) && !IsInShell;
         public readonly bool IsDamageable => !IsStarmanInvincible && DamageInvincibilityFrames == 0;
         public readonly bool IsInKnockback => CurrentKnockback != KnockbackStrength.None;
         public readonly bool CanCollectOwnTeamsObjectiveCoins => !IsInKnockback && DamageInvincibilityFrames == 0;
@@ -174,7 +175,7 @@ namespace Quantum {
             return CurrentPowerupState == PowerupState.MegaMushroom
                 || IsStarmanInvincible
                 || IsInShell
-                || (((includeSliding && IsSliding) || IsCrouchedInShell) && FPMath.Abs(physicsObject->Velocity.X) > FP._0_33);
+                || includeSliding && IsSliding && FPMath.Abs(physicsObject->Velocity.X) > FP._0_33;
         }
 
         public readonly int GetSpeedStage(PhysicsObject* physicsObject, MarioPlayerPhysicsInfo physicsInfo) {
@@ -496,6 +497,10 @@ namespace Quantum {
             IsSliding = false;
             IsDrilling = false;
             WallslideLeft = WallslideRight = false;
+
+            if (f.Unsafe.TryGetPointer(attacker, out Projectile* projectile)) {
+                attacker = projectile->Owner;
+            }
             LastAttacker = attacker;
 
             f.Signals.OnMarioPlayerDropObjective(entity, starsToDrop, attacker);
@@ -546,6 +551,7 @@ namespace Quantum {
             PipeDirection = pipeComponent->IsCeilingPipe ? FPVector2.Up : FPVector2.Down;
 
             var pipeTransform = f.Unsafe.GetPointer<Transform2D>(pipe);
+            var otherPipeTransform = f.Unsafe.GetPointer<Transform2D>(pipeComponent->OtherPipe);
             var marioTransform = f.Unsafe.GetPointer<Transform2D>(mario);
             marioTransform->Position.X = pipeTransform->Position.X;
 
@@ -563,7 +569,12 @@ namespace Quantum {
                 InvincibilityFrames += (ushort) (PipeFrames * 2);
             }
 
-            f.Events.MarioPlayerEnteredPipe(mario, CurrentPipe);
+            sbyte horizontalDirection;
+            if (pipeComponent->TransitionOnlyPanning)
+                horizontalDirection = 0;
+            else
+                horizontalDirection = (sbyte)(otherPipeTransform->Position.X < pipeTransform->Position.X ? -1 : 1);
+            f.Events.MarioPlayerEnteredPipe(mario, CurrentPipe, false, horizontalDirection, FPVector2.Zero);
         }
 
         private static void SetValue(ref BitSet21 bitset, int index, bool value) {

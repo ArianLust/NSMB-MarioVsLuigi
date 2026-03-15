@@ -2075,30 +2075,33 @@ namespace Quantum {
     public const Int32 ALIGNMENT = 8;
     [FieldOffset(40)]
     public FPVector2 Spawnpoint;
-    [FieldOffset(16)]
-    public QBoolean IgnorePlayerWhenRespawning;
-    [FieldOffset(8)]
-    public QBoolean DisableRespawning;
-    [FieldOffset(32)]
-    public QBoolean StayAtHomeWhenOffscreen;
-    [FieldOffset(20)]
-    [ExcludeFromPrototype()]
-    public QBoolean IsActive;
     [FieldOffset(24)]
-    [ExcludeFromPrototype()]
-    public QBoolean IsDead;
+    public QBoolean IgnorePlayerWhenRespawning;
     [FieldOffset(12)]
-    [ExcludeFromPrototype()]
-    public QBoolean FacingRight;
+    public QBoolean DisableRespawning;
+    [FieldOffset(36)]
+    public QBoolean StayAtHomeWhenOffscreen;
     [FieldOffset(28)]
     [ExcludeFromPrototype()]
-    public QBoolean LeftHome;
-    [FieldOffset(4)]
+    public QBoolean IsActive;
+    [FieldOffset(32)]
+    [ExcludeFromPrototype()]
+    public QBoolean IsDead;
+    [FieldOffset(20)]
+    [ExcludeFromPrototype()]
+    public QBoolean IgnoreOffscreen;
+    [FieldOffset(16)]
+    [ExcludeFromPrototype()]
+    public QBoolean FacingRight;
+    [FieldOffset(8)]
     [ExcludeFromPrototype()]
     public Int32 RespawnTimer;
-    [FieldOffset(0)]
+    [FieldOffset(4)]
     [ExcludeFromPrototype()]
     public Int32 RespawnSparklesTimer;
+    [FieldOffset(0)]
+    [ExcludeFromPrototype()]
+    public Int32 IntangibilityFrames;
     public override readonly Int32 GetHashCode() {
       unchecked { 
         var hash = 11071;
@@ -2108,23 +2111,25 @@ namespace Quantum {
         hash = hash * 31 + StayAtHomeWhenOffscreen.GetHashCode();
         hash = hash * 31 + IsActive.GetHashCode();
         hash = hash * 31 + IsDead.GetHashCode();
+        hash = hash * 31 + IgnoreOffscreen.GetHashCode();
         hash = hash * 31 + FacingRight.GetHashCode();
-        hash = hash * 31 + LeftHome.GetHashCode();
         hash = hash * 31 + RespawnTimer.GetHashCode();
         hash = hash * 31 + RespawnSparklesTimer.GetHashCode();
+        hash = hash * 31 + IntangibilityFrames.GetHashCode();
         return hash;
       }
     }
     public static void Serialize(void* ptr, FrameSerializer serializer) {
         var p = (Enemy*)ptr;
+        serializer.Stream.Serialize(&p->IntangibilityFrames);
         serializer.Stream.Serialize(&p->RespawnSparklesTimer);
         serializer.Stream.Serialize(&p->RespawnTimer);
         QBoolean.Serialize(&p->DisableRespawning, serializer);
         QBoolean.Serialize(&p->FacingRight, serializer);
+        QBoolean.Serialize(&p->IgnoreOffscreen, serializer);
         QBoolean.Serialize(&p->IgnorePlayerWhenRespawning, serializer);
         QBoolean.Serialize(&p->IsActive, serializer);
         QBoolean.Serialize(&p->IsDead, serializer);
-        QBoolean.Serialize(&p->LeftHome, serializer);
         QBoolean.Serialize(&p->StayAtHomeWhenOffscreen, serializer);
         FPVector2.Serialize(&p->Spawnpoint, serializer);
     }
@@ -2141,6 +2146,8 @@ namespace Quantum {
     public QBoolean IsCeilingPipe;
     [FieldOffset(8)]
     public QBoolean IsMiniOnly;
+    [FieldOffset(12)]
+    public QBoolean TransitionOnlyPanning;
     public override readonly Int32 GetHashCode() {
       unchecked { 
         var hash = 47;
@@ -2148,6 +2155,7 @@ namespace Quantum {
         hash = hash * 31 + IsEnterable.GetHashCode();
         hash = hash * 31 + IsCeilingPipe.GetHashCode();
         hash = hash * 31 + IsMiniOnly.GetHashCode();
+        hash = hash * 31 + TransitionOnlyPanning.GetHashCode();
         return hash;
       }
     }
@@ -2156,6 +2164,7 @@ namespace Quantum {
         QBoolean.Serialize(&p->IsCeilingPipe, serializer);
         QBoolean.Serialize(&p->IsEnterable, serializer);
         QBoolean.Serialize(&p->IsMiniOnly, serializer);
+        QBoolean.Serialize(&p->TransitionOnlyPanning, serializer);
         EntityRef.Serialize(&p->OtherPipe, serializer);
     }
   }
@@ -2590,13 +2599,13 @@ namespace Quantum {
     [FieldOffset(64)]
     [ExcludeFromPrototype()]
     public PlayerRef PlayerRef;
-    [FieldOffset(33)]
+    [FieldOffset(34)]
     [ExcludeFromPrototype()]
     public Byte SpawnpointIndex;
-    [FieldOffset(40)]
+    [FieldOffset(41)]
     [ExcludeFromPrototype()]
     public PowerupState CurrentPowerupState;
-    [FieldOffset(41)]
+    [FieldOffset(42)]
     [ExcludeFromPrototype()]
     public PowerupState PreviousPowerupState;
     [FieldOffset(104)]
@@ -2644,19 +2653,19 @@ namespace Quantum {
     [FieldOffset(8)]
     [ExcludeFromPrototype()]
     public Byte FastTurnaroundFrames;
-    [FieldOffset(32)]
+    [FieldOffset(33)]
     [ExcludeFromPrototype()]
     public Byte SlowTurnaroundFrames;
     [FieldOffset(60)]
     [ExcludeFromPrototype()]
     public Int32 LastPushingFrame;
-    [FieldOffset(34)]
+    [FieldOffset(35)]
     [ExcludeFromPrototype()]
     public Byte StationaryFrames;
-    [FieldOffset(37)]
+    [FieldOffset(38)]
     [ExcludeFromPrototype()]
     public JumpState JumpState;
-    [FieldOffset(38)]
+    [FieldOffset(39)]
     [ExcludeFromPrototype()]
     public JumpState PreviousJumpState;
     [FieldOffset(14)]
@@ -2677,10 +2686,10 @@ namespace Quantum {
     [FieldOffset(0)]
     [ExcludeFromPrototype()]
     public Byte CantJumpTimer;
-    [FieldOffset(36)]
+    [FieldOffset(37)]
     [ExcludeFromPrototype()]
     public Byte WallslideEndFrames;
-    [FieldOffset(35)]
+    [FieldOffset(36)]
     [ExcludeFromPrototype()]
     public Byte WalljumpFrames;
     [FieldOffset(12)]
@@ -2692,7 +2701,7 @@ namespace Quantum {
     [FieldOffset(11)]
     [ExcludeFromPrototype()]
     public Byte GroundpoundStandFrames;
-    [FieldOffset(39)]
+    [FieldOffset(40)]
     [ExcludeFromPrototype()]
     public KnockbackStrength CurrentKnockback;
     [FieldOffset(52)]
@@ -2710,13 +2719,13 @@ namespace Quantum {
     [FieldOffset(144)]
     [ExcludeFromPrototype()]
     public EntityRef LastAttacker;
-    [FieldOffset(42)]
+    [FieldOffset(44)]
     [ExcludeFromPrototype()]
     public UInt16 InvincibilityFrames;
     [FieldOffset(19)]
     [ExcludeFromPrototype()]
     public Byte MegaMushroomStartFrames;
-    [FieldOffset(44)]
+    [FieldOffset(46)]
     [ExcludeFromPrototype()]
     public UInt16 MegaMushroomFrames;
     [FieldOffset(17)]
@@ -2737,6 +2746,9 @@ namespace Quantum {
     [FieldOffset(5)]
     [ExcludeFromPrototype()]
     public Byte CurrentVolley;
+    [FieldOffset(32)]
+    [ExcludeFromPrototype()]
+    public Byte ShellSpeedStage;
     [FieldOffset(31)]
     [ExcludeFromPrototype()]
     public Byte ShellSlowdownFrames;
@@ -2828,6 +2840,7 @@ namespace Quantum {
         hash = hash * 31 + ProjectileVolleyFrames.GetHashCode();
         hash = hash * 31 + CurrentProjectiles.GetHashCode();
         hash = hash * 31 + CurrentVolley.GetHashCode();
+        hash = hash * 31 + ShellSpeedStage.GetHashCode();
         hash = hash * 31 + ShellSlowdownFrames.GetHashCode();
         hash = hash * 31 + PropellerLaunchFrames.GetHashCode();
         hash = hash * 31 + PropellerSpinFrames.GetHashCode();
@@ -2877,6 +2890,7 @@ namespace Quantum {
         serializer.Stream.Serialize(&p->PropellerSpinFrames);
         serializer.Stream.Serialize(&p->RespawnFrames);
         serializer.Stream.Serialize(&p->ShellSlowdownFrames);
+        serializer.Stream.Serialize(&p->ShellSpeedStage);
         serializer.Stream.Serialize(&p->SlowTurnaroundFrames);
         serializer.Stream.Serialize(&p->SpawnpointIndex);
         serializer.Stream.Serialize(&p->StationaryFrames);
@@ -3510,7 +3524,6 @@ namespace Quantum {
     public const Int32 MaxStarSpawns = 64;
     public const Int32 EnemyMaxDistFromMario = 8;
     public const Int32 EnemyHomeBoxBuffer = 8;
-    public const Int32 EnemyHomeBoxLeaveWidth = 3;
     public const Int32 MaxPlayers = 10;
     public const Int32 DamageInvincibilityFrames = 120;
     /// <summary>8.5</summary>

@@ -30,6 +30,29 @@ namespace Quantum {
             f.Context.Interactions.Register<Koopa, IceBlock>(f, OnKoopaIceBlockInteraction);
         }
 
+        public EntityRef FindClosestPlayer(Frame f, ref Filter filter, VersusStageData stage) {
+            var allPlayers = f.Filter<MarioPlayer, Transform2D>();
+            allPlayers.UseCulling = false;
+            var koopaPosition = filter.Transform->Position;
+
+            FP closestDistance = FP.MaxValue;
+            EntityRef closestPlayer = EntityRef.None;
+            while (allPlayers.NextUnsafe(out EntityRef marioEntity, out MarioPlayer* mario, out Transform2D* marioTransform)) {
+                if (mario->IsDead) {
+                    continue;
+                }
+
+                FP newDistance = QuantumUtils.WrappedDistance(stage, koopaPosition, marioTransform->Position);
+
+                if (newDistance <= closestDistance) {
+                    closestPlayer = marioEntity;
+                    closestDistance = newDistance;
+                }
+            }
+            return closestPlayer;
+        }
+
+
         public override void Update(Frame f, ref Filter filter, VersusStageData stage) {
             var entity = filter.Entity;
             var enemy = filter.Enemy;
@@ -46,6 +69,7 @@ namespace Quantum {
 
             freezable->IceBlockSize = (koopa->IsSpiny || koopa->IsInShell) ? koopa->IceBlockInShellSize : koopa->IceBlockOutShellSize;
 
+            // Koopa must be stationary in its shell
             if (koopa->IsInShell && !koopa->IsKicked) {
                 if (QuantumUtils.Decrement(ref koopa->WakeupFrames)) {
                     koopa->IsInShell = false;
@@ -53,7 +77,19 @@ namespace Quantum {
                     koopa->IsFlipped = false;
                     koopa->CurrentSpeed = koopa->Speed;
                     enemy->FacingRight = false;
+                    enemy->IgnoreOffscreen = false; // woke UP and returned home if offscreen
                     koopa->TurnaroundWaitFrames = 18;
+
+                    // turn to face closest player
+                    var shouldFaceRight = false;
+                    var closestMario = FindClosestPlayer(f, ref filter, stage);
+
+                    if (f.Unsafe.TryGetPointer(closestMario, out Transform2D* marioTransform)) {
+                        QuantumUtils.WrappedDistance(f, transform->Position, marioTransform->Position, out FP xDiff);
+                        shouldFaceRight = xDiff < 0;
+                    }
+
+                    enemy->ChangeFacingRight(f, entity, shouldFaceRight);
 
                     var holdable = filter.Holdable;
                     if (f.Exists(holdable->Holder)) {
@@ -230,12 +266,30 @@ namespace Quantum {
 
             bool groundpounded = attackedFromAbove && mario->IsGroundpoundActive && mario->CurrentPowerupState != PowerupState.MiniMushroom;
             if (isSpiny) {
-                // Do damage
+                // Mario is in Blue Shell (not spinning)
                 if (mario->IsCrouchedInShell) {
-                    mario->FacingRight = damageDirection.X < 0;
-                    marioPhysicsObject->Velocity.X = 0;
+                    // hip dropping the spiny will cause it to spin identical to a regular Koopa Troopa
+                    if (groundpounded) {
+                        // Kick
+                        koopa->IsInShell = true;
+                        koopa->IsKicked = false;
+                        koopaEnemy->ChangeFacingRight(f, koopaEntity, ourPos.X > theirPos.X);
+                        koopaEnemy->IgnoreOffscreen = true;
+                        koopa->EnterShell(f, koopaEntity, marioEntity, false, true);
+                        koopa->Kick(f, koopaEntity, marioEntity, 3);
+                        koopaPhysicsObject->Velocity.Y = 2;
+                    } else {
+                        // regular interactions, turn around (only if not inside Mario)
+                        if (!koopa->IsInShell && FPMath.Abs(ourPos.X - theirPos.X) > FP._0_33) {
+                            marioPhysicsObject->Velocity.X = 0;
+                            koopaEnemy->ChangeFacingRight(f, koopaEntity, ourPos.X > theirPos.X);
+                        } else if (koopa->IsInShell) {
+                            // spinies in shells are killed
+                            koopa->Kill(f, koopaEntity, marioEntity, EnemyKillReason.Normal);
+                        }
+                    }
 
-                } else if (mario->IsDamageable) {
+                } else if (mario->IsDamageable && (QuantumUtils.Decrement(ref koopaEnemy->IntangibilityFrames) || koopa->IsInShell)) {
                     mario->Powerdown(f, marioEntity, false, koopaEntity);
                     if (!koopa->IsInShell) {
                         koopaEnemy->ChangeFacingRight(f, koopaEntity, damageDirection.X > 0);
@@ -259,6 +313,7 @@ namespace Quantum {
                     koopa->IsInShell = true;
                     koopa->IsKicked = false;
                     koopaEnemy->ChangeFacingRight(f, koopaEntity, ourPos.X > theirPos.X);
+                    koopaEnemy->IgnoreOffscreen = true; // don't despawn spinning shells!
                     koopa->EnterShell(f, koopaEntity, marioEntity, false, true);
                     koopa->Kick(f, koopaEntity, marioEntity, 3);
                     koopaPhysicsObject->Velocity.Y = 2;
@@ -269,7 +324,7 @@ namespace Quantum {
             if (koopa->IsKicked || !koopa->IsInShell) {
                 // Moving (either in shell, or walking)
                 if (attackedFromAbove) {
-                    // Enter Shell
+                    // drop a powerUP if it has one, otherwise enter shell
                     if (!koopa->IsKicked && koopa->SpawnPowerupWhenStomped.IsValid) {
                         PowerupAsset powerupAsset = f.FindAsset(koopa->SpawnPowerupWhenStomped);
                         EntityRef newPowerup = f.Create(powerupAsset.Prefab);
@@ -288,18 +343,22 @@ namespace Quantum {
 
                     } else if (mario->CurrentPowerupState != PowerupState.MiniMushroom || mario->IsGroundpoundActive) {
                         koopa->EnterShell(f, koopaEntity, marioEntity, false, false);
+                        koopaEnemy->IgnoreOffscreen = true; // stationary shells also don't return home
                     }
                     mario->DoEntityBounce = true;
                     koopaHoldable->PreviousHolder = marioEntity;
                     koopaHoldable->IgnoreOwnerFrames = 5;
                 } else {
-                    // Damage
+                    // Damage?
                     if (mario->IsCrouchedInShell) {
-                        //mario->FacingRight = damageDirection.X < 0;
-                        //marioPhysicsObject->Velocity.X = 0;
-                        koopa->Kill(f, koopaEntity, marioEntity, EnemyKillReason.Special);
+                        if (koopa->IsInShell) {
+                            koopa->Kill(f, koopaEntity, marioEntity, EnemyKillReason.Special);
+                        } else {
+                            marioPhysicsObject->Velocity.X = 0;
+                            koopaEnemy->ChangeFacingRight(f, koopaEntity, ourPos.X > theirPos.X);
+                        }
 
-                    } else if (mario->IsDamageable) {
+                    } else if (mario->IsDamageable && (QuantumUtils.Decrement(ref koopaEnemy->IntangibilityFrames) || koopa->IsKicked)) {
                         mario->Powerdown(f, marioEntity, false, koopaEntity);
                         if (!koopa->IsInShell) {
                             koopaEnemy->ChangeFacingRight(f, koopaEntity, damageDirection.X > 0);
@@ -315,11 +374,12 @@ namespace Quantum {
             } else {
                 koopa->Kick(f, koopaEntity, marioEntity, FPMath.Abs(marioPhysicsObject->Velocity.X) * FP._0_33);
                 koopaEnemy->ChangeFacingRight(f, koopaEntity, ourPos.X > theirPos.X);
+                koopaEnemy->IgnoreOffscreen = true;
             }
         }
         
         public static bool OnKoopaIceBlockInteraction(Frame f, EntityRef koopaEntity, EntityRef iceBlockEntity, PhysicsContact contact) {
-            var koopa = f.Unsafe.GetPointer<Koopa>(koopaEntity);
+            var koopa = f.Unsafe.GetPointer<Koopa>(koopaEntity);                         
             var iceBlock = f.Unsafe.GetPointer<IceBlock>(iceBlockEntity);
 
             FP upDot = FPVector2.Dot(contact.Normal, FPVector2.Up);

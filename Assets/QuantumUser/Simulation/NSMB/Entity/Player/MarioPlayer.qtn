@@ -108,6 +108,7 @@ component MarioPlayer {
 	[ExcludeFromPrototype] byte CurrentProjectiles;
 	[ExcludeFromPrototype] byte CurrentVolley;
 
+	[ExcludeFromPrototype] byte ShellSpeedStage;
     [ExcludeFromPrototype] byte ShellSlowdownFrames;
 
 	[ExcludeFromPrototype] byte PropellerLaunchFrames;
@@ -255,6 +256,9 @@ event MarioPlayerMegaEnd {
 event MarioPlayerEnteredPipe {
 	EntityRef Entity;
 	EntityRef Pipe;
+	bool Exiting;
+	sbyte HorizontalWarpDirection;
+	FPVector2 Offset;
 }
 
 event MarioPlayerStoppedSliding {
