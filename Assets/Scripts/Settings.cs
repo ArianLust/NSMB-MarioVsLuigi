@@ -13,8 +13,9 @@ namespace NSMB {
         //---Static Variables
         private static Controls _controls;
         public static Controls Controls => _controls;
-        public static event Action OnColorblindModeChanged, OnNametagVisibilityChanged, OnDisableChatChanged, OnNdsResolutionSettingChanged, OnDiscordIntegrationChanged;
+        public static event Action OnColorblindModeChanged, OnNametagVisibilityChanged, OnDisableChatChanged, OnNdsResolutionSettingChanged, OnDiscordIntegrationChanged, OnCondensedScoreboardChanged;
         public static event Action<bool> OnInputDisplayActiveChanged, OnReplaysEnabledChanged;
+        public static event Action<float> OnHudScaleChanged;
 
         //---Properties
 
@@ -67,6 +68,15 @@ namespace NSMB {
             set {
                 _generalReplaysEnabled = value;
                 OnReplaysEnabledChanged?.Invoke(value);
+            }
+        }
+        
+        private bool _generalCondensedScoreboard;
+        public bool GeneralCondensedScoreboard {
+            get => _generalCondensedScoreboard;
+            set {
+                _generalCondensedScoreboard = value;
+                OnCondensedScoreboardChanged?.Invoke();
             }
         }
 
@@ -165,6 +175,15 @@ namespace NSMB {
             set => GlobalController.Instance.outlineFeature.SetActive(value);
         }
 
+        private float _graphicsHudScale;
+        public float GraphicsHudScale {
+            get => _graphicsHudScale;
+            set {
+                _graphicsHudScale = value;
+                OnHudScaleChanged?.Invoke(value);
+            }
+        }
+
         private bool _graphicsPlayerNametags;
         public bool GraphicsPlayerNametags {
             get => _graphicsPlayerNametags;
@@ -234,15 +253,22 @@ namespace NSMB {
             Set(this);
             VersionUpdaters = new Action[] { LoadFromVersion0, LoadFromVersion1, LoadFromVersion2 };
             LoadSettings();
+            _controls.Enable();
 
             // Potential duplicate bindings not activating fix?
             InputSystem.settings.SetInternalFeatureFlag("DISABLE_SHORTCUT_SUPPORT", true);
+        }
+
+        public void OnDestroy() {
+            _controls.Disable();
+            _controls.Dispose();
         }
 
         public void SaveSettings() {
             // Generic
             PlayerPrefs.SetString("General_Nickname", generalNickname);
             PlayerPrefs.SetInt("General_ScoreboardAlwaysVisible", generalScoreboardAlways ? 1 : 0);
+            PlayerPrefs.SetInt("General_CondensedScoreboard", GeneralCondensedScoreboard ? 1 : 0);
             PlayerPrefs.SetInt("General_DisableChat", GeneralDisableChat ? 1 : 0);
             PlayerPrefs.SetInt("General_ChatFilter", generalChatFiltering ? 1 : 0);
             PlayerPrefs.SetString("General_Character", generalCharacter.Id.ToString());
@@ -261,6 +287,7 @@ namespace NSMB {
             PlayerPrefs.SetInt("Graphics_NDS_PixelPerfect", GraphicsNdsPixelPerfect ? 1 : 0);
             PlayerPrefs.SetInt("Graphics_VSync", GraphicsVsync ? 1 : 0);
             PlayerPrefs.SetInt("Graphics_MaxFPS", GraphicsMaxFps);
+            PlayerPrefs.SetFloat("Graphics_HudScale", GraphicsHudScale);
             PlayerPrefs.SetInt("Graphics_PlayerOutlines", GraphicsPlayerOutlines ? 1 : 0);
             PlayerPrefs.SetInt("Graphics_PlayerNametags", GraphicsPlayerNametags ? 1 : 0);
             PlayerPrefs.SetInt("Graphics_Colorblind", GraphicsColorblind ? 1 : 0);
@@ -301,7 +328,9 @@ namespace NSMB {
 
         public void LoadSettings() {
             for (int i = 0; i < VersionUpdaters.Length; i++) {
-                VersionUpdaters[i]();
+                try {
+                    VersionUpdaters[i]();
+                } catch { }
             }
             SaveSettings();
         }
@@ -325,6 +354,7 @@ namespace NSMB {
 
             generalNickname = PlayerPrefs.GetString("Nickname");
             generalScoreboardAlways = PlayerPrefs.GetInt("ScoreboardAlwaysVisible", 1) != 0;
+            GeneralCondensedScoreboard = false;
             GeneralDisableChat = false;
             generalChatFiltering = PlayerPrefs.GetInt("ChatFilter", 1) != 0;
             generalCharacter = Utils.IndexIntoOrDefault(AssetRepository<CharacterAsset>.AllAssetRefs, PlayerPrefs.GetInt("Character", 0), AssetRepository<CharacterAsset>.AllAssetRefs[0]);
@@ -342,6 +372,7 @@ namespace NSMB {
             GraphicsNdsPixelPerfect = false;
             GraphicsVsync = PlayerPrefs.GetInt("VSync", 1) != 0;
             GraphicsMaxFps = 0;
+            GraphicsHudScale = 8;
             GraphicsPlayerOutlines = true;
             GraphicsPlayerNametags = true;
             GraphicsColorblind = false;
@@ -379,6 +410,7 @@ namespace NSMB {
             // Generic
             TryGetSetting("General_Nickname", ref generalNickname);
             TryGetSetting("General_ScoreboardAlwaysVisible", ref generalScoreboardAlways);
+            TryGetSetting<bool>("General_CondensedScoreboard", nameof(GeneralCondensedScoreboard));
             TryGetSetting<bool>("General_DisableChat", nameof(GeneralDisableChat));
             TryGetSetting("General_ChatFilter", ref generalChatFiltering);
             int generalCharacterOld = 0;
@@ -403,6 +435,7 @@ namespace NSMB {
             TryGetSetting<bool>("Graphics_NDS_PixelPerfect", nameof(GraphicsNdsPixelPerfect));
             TryGetSetting<int>("Graphics_MaxFPS", nameof(GraphicsMaxFps));
             TryGetSetting<bool>("Graphics_VSync", nameof(GraphicsVsync));
+            TryGetSetting<float>("Graphics_HudScale", nameof(GraphicsHudScale));
             TryGetSetting<bool>("Graphics_PlayerOutlines", nameof(GraphicsPlayerOutlines));
             TryGetSetting<bool>("Graphics_PlayerNametags", nameof(GraphicsPlayerNametags));
             TryGetSetting<bool>("Graphics_Colorblind", nameof(GraphicsColorblind));

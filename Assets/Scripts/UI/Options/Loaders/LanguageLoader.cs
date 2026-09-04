@@ -19,18 +19,14 @@ namespace NSMB.UI.Options.Loaders {
             locales.Sort();
 
             spo.options.AddRange(locales.Select(locale => {
-                tm.TryGetTranslationForLocale(locale, "lang", out string name);
-                if (!tm.IsLocaleRTL(locale)) {
-                    // LTR
+                if (tm.TryGetTranslationForLocale(locale, "lang", out string name)) {
                     return name;
                 } else {
-                    // RTL
-                    return ArabicSupport.ArabicFixer.Fix(name, false);
+                    return $"'lang' missing for '{locale}'";
                 }
             }));
 
-            string current = tm.CurrentLocale;
-            int currentIndex = locales.IndexOf(current);
+            int currentIndex = locales.IndexOf(tm.CurrentLocale);
             spo.SetValue(currentIndex);
         }
 

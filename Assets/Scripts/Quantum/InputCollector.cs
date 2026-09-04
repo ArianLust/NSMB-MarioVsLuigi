@@ -16,11 +16,13 @@ namespace NSMB.Quantum {
 
         public void Start() {
             Settings.Controls.Player.ReserveItem.performed += OnPowerupAction;
+            Settings.Controls.Player.Taunt.performed += OnTaunt;
             QuantumCallback.Subscribe<CallbackPollInput>(this, OnPollInput);
         }
 
         public void OnDestroy() {
             Settings.Controls.Player.ReserveItem.performed -= OnPowerupAction;
+            Settings.Controls.Player.Taunt.performed -= OnTaunt;
         }
 
         public void Update() {
@@ -48,11 +50,22 @@ namespace NSMB.Quantum {
                     CommandId = CommandMvLDebugCmd.DebugCommand.FreezeSelf,
                 });
             }
+            if (keyboard[Key.I].wasPressedThisFrame) {
+                game.SendCommand(new CommandMvLDebugCmd {
+                    CommandId = CommandMvLDebugCmd.DebugCommand.KnockbackSelf,
+                });
+            }
         }
 
         public void OnPowerupAction(InputAction.CallbackContext context) {
             if (!playerElements.IsSpectating && !playerElements.PauseMenu.IsPaused) {
                 QuantumRunner.DefaultGame.SendCommand(new CommandSpawnReserveItem());
+            }
+        }
+
+        private void OnTaunt(InputAction.CallbackContext context) {
+            if (!playerElements.IsSpectating && !playerElements.PauseMenu.IsPaused) {
+                QuantumRunner.DefaultGame.SendCommand(new CommandTaunt());
             }
         }
 

@@ -9,10 +9,16 @@ namespace NSMB.Utilities {
         static AssetRepository() {
             AddonManager.OnAddonLoaded += OnAddonListChanged;
             AddonManager.OnAddonUnloaded += OnAddonListChanged;
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.playModeStateChanged += (_) => {
+                _allAssetRefs = null;
+                _allAssets = null;
+            };
+#endif
         }
 
         private static List<AssetRef<T>> _allAssetRefs;
-        public static List<AssetRef<T>> AllAssetRefs {
+        public static IReadOnlyList<AssetRef<T>> AllAssetRefs {
             get {
                 if (_allAssetRefs == null) {
                     Load();

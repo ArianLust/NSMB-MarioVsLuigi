@@ -16,6 +16,12 @@ namespace Quantum {
             f.SystemDisable<GoldBlockSystem>();
        }
 
+        public override void OnReturnToRoom(Frame f) {
+            f.Global->MainBigStar = EntityRef.None;
+            f.Global->BigStarSpawnTimer = 0;
+            f.Global->UsedStarSpawns.ClearAll();
+        }
+
         public override void CheckForGameEnd(Frame f) {
             // End Condition: only one team alive
             Span<int> objectiveCounts = stackalloc int[Constants.MaxPlayers];
@@ -61,18 +67,6 @@ namespace Quantum {
             }
         }
 
-        public override int GetObjectiveCount(Frame f, PlayerRef player) {
-            foreach ((_, var mario) in f.Unsafe.GetComponentBlockIterator<MarioPlayer>()) {
-                if (player != mario->PlayerRef) {
-                    continue;
-                }
-
-                return GetObjectiveCount(f, mario);
-            }
-
-            return -1;
-        }
-
         public override int GetObjectiveCount(Frame f, MarioPlayer* mario) {
             if (mario == null || !mario->IsValid(f)) {
                 return -1;
@@ -90,7 +84,16 @@ namespace Quantum {
             FP percentageTimeRemaining = f.Global->Timer / (f.Global->Rules.TimerMinutes * 60);
             FP whichBonus = avgDiff > 0 ? item.AboveAverageBonus : item.BelowAverageBonus;
             FP bonus = whichBonus * FPMath.Log((FPMath.Abs(avgDiff) / 40) + 1, FP.E) * 1 - (percentageTimeRemaining * percentageTimeRemaining);
-            return FPMath.Max(0, item.SpawnChance + bonus);
+
+            FP unclampedWeight = item.SpawnChance + bonus;
+
+            if (f.TryResolveDictionary(f.Global->Rules.CoinItemCustomSpawnWeights, out var customWeights)) {
+                if (customWeights.TryGetValue(item, out FP additionalWeight)) {
+                    unclampedWeight += additionalWeight;
+                }
+            }
+
+            return FPMath.Max(0, unclampedWeight);
         }
     }
 }

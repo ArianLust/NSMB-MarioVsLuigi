@@ -23,7 +23,7 @@ namespace NSMB.UI.Translation {
         [SerializeField] private string fallbackLocale = "en-us";
 
         //---Private Variables
-        private readonly Dictionary<string, List<ITranslationSource>> allTranslations = new();
+        private readonly Dictionary<string, List<ITranslationSource>> allTranslations = new(StringComparer.InvariantCultureIgnoreCase);
         private bool initialized;
 
         public void Start() {
@@ -48,17 +48,21 @@ namespace NSMB.UI.Translation {
         }
 
         public string GetTranslation(string key) {
-            _ = TryGetTranslation(key, out var result);
+            return GetTranslation(key, fixRtl: true);
+        }
+
+        public string GetTranslation(string key, bool fixRtl) {
+            _ = TryGetTranslation(key, out var result, fixRtl);
             return result;
         }
 
-        public bool TryGetTranslation(string key, out string result) {
+        public bool TryGetTranslation(string key, out string result, bool fixRtl = true) {
             Initialize();
 
-            if (TryGetTranslationForLocale(CurrentLocale, key, out result)) {
+            if (TryGetTranslationForLocale(CurrentLocale, key, out result, fixRtl)) {
                 return true;
             }
-            if (TryGetTranslationForLocale(fallbackLocale, key, out result)) {
+            if (TryGetTranslationForLocale(fallbackLocale, key, out result, fixRtl)) {
                 return true;
             }
             // Default to returning the key.
@@ -97,19 +101,24 @@ namespace NSMB.UI.Translation {
         public void Reload() {
             Initialize();
 
-            foreach (var source in allTranslations[CurrentLocale]) {
-                try {
-                    source.Reload();
-                } catch {
-                    // Something happened to this source.
-                    // It's old state still should be loaded, so it's ok...
+            foreach ((var locale, var sourceList) in allTranslations) {
+                foreach (var source in sourceList) {
+                    try {
+                        source.Reload();
+                    } catch (Exception e) {
+                        // Something happened to this source.
+                        // It's old state still should be loaded, so it's ok...
+                        // ...maybe
+                        Debug.LogWarning($"[Translation] Failed to reload translation source for locale '{locale}': {source} (priority {source.Priority})");
+                        Debug.LogWarning(e);
+                    }
                 }
             }
         }
 
         public void RegisterTranslationSource(string locale, ITranslationSource source) {
             if (!allTranslations.TryGetValue(locale, out var sourceList)) {
-                sourceList = new();
+                allTranslations[locale] = sourceList = new();
             }
 
             if (sourceList.Contains(source)) {
@@ -118,10 +127,17 @@ namespace NSMB.UI.Translation {
 
             sourceList.Add(source);
             sourceList.Sort();
-            allTranslations[locale] = sourceList;
         }
 
-        public bool TryGetTranslationForLocale(string locale, string key, out string result) {
+        public bool UnregisterTranslationSource(string locale, ITranslationSource source) {
+            if (!allTranslations.TryGetValue(locale, out var sourceList)) {
+                return false;
+            }
+
+            return sourceList.Remove(source);
+        }
+
+        public bool TryGetTranslationForLocale(string locale, string key, out string result, bool fixRtl = true) {
             key ??= "null";
             key = key.ToLowerInvariant();
 
@@ -129,7 +145,7 @@ namespace NSMB.UI.Translation {
                 for (int i = sources.Count - 1; i >= 0; i--) {
                     // No foreach, we want backwards iteration- list is ascending sorted by priority.
                     if (sources[i].TryGetTranslation(key, out result)) {
-                        if (IsLocaleRTL(locale)) {
+                        if (IsLocaleRTL(locale) && fixRtl) {
                             result = ArabicFixerTool.FixLine(result);
                         }
                         return true;

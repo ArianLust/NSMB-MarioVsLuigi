@@ -2388,6 +2388,204 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
+    - serializedVersion: 2
+      name: random
+      rect:
+        serializedVersion: 2
+        x: 219
+        y: 185
+        width: 16
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 9bdb2dd3ce0756045b49f0d946a5130b
+      internalID: -1497189084
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: flag_us
+      rect:
+        serializedVersion: 2
+        x: 230
+        y: 158
+        width: 21
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 89aeebe6ddad6a04fbc294afca8ecb92
+      internalID: 1755903274
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: flag_jp
+      rect:
+        serializedVersion: 2
+        x: 230
+        y: 141
+        width: 21
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 3b7b112d289be0b4692bd5e967f50009
+      internalID: 1033005741
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: flag_sa
+      rect:
+        serializedVersion: 2
+        x: 230
+        y: 124
+        width: 21
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 5f683d78c42130e478b9b927f8349f44
+      internalID: -1773040759
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: flag_au
+      rect:
+        serializedVersion: 2
+        x: 230
+        y: 107
+        width: 21
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 44c57dc1941792e4daa6c866c74e6438
+      internalID: -1230148392
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: flag_eu
+      rect:
+        serializedVersion: 2
+        x: 230
+        y: 90
+        width: 21
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 1516c4dc1b0680e4c85653784507714e
+      internalID: -1362679900
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: flag_usw
+      rect:
+        serializedVersion: 2
+        x: 230
+        y: 158
+        width: 21
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: f176eda0c8dc6f6428ed728d8a9e117c
+      internalID: -1015355915
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: flag_ussc
+      rect:
+        serializedVersion: 2
+        x: 230
+        y: 158
+        width: 21
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: ea5d41a9c912cd342968d7ec56e1dba9
+      internalID: 353410421
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: unlock
+      rect:
+        serializedVersion: 2
+        x: 237
+        y: 185
+        width: 16
+        height: 16
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 7533e10238a30ee428b22766d745082a
+      internalID: -1138012097
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
@@ -2424,6 +2622,13 @@ TextureImporter:
       copy: -1032943485
       dpad_button: -1771438400
       dropdown_arrow: -2027879749
+      flag_au: -1230148392
+      flag_eu: -1362679900
+      flag_jp: 1033005741
+      flag_sa: -1773040759
+      flag_us: 1755903274
+      flag_ussc: 353410421
+      flag_usw: -1015355915
       hud_arrow: 1388684475
       hud_luigi: -7975249404588759376
       hud_mario: 7263181891274304025
@@ -2461,6 +2666,7 @@ TextureImporter:
       playernumber_8: 180310867
       playernumber_9: -416960693
       r_button: 907324317
+      random: -1497189084
       room_addons: -971827560
       room_camera: -1332971411
       room_coins: 1534273505
@@ -2501,6 +2707,7 @@ TextureImporter:
       team_yellow: -769868482
       team_yellow_alt: 712068762
       team_yellow_alt_big: 1936513099
+      unlock: -1138012097
       x_button: 2096157750
       y_button: -600503074
   mipmapLimitGroupName: 

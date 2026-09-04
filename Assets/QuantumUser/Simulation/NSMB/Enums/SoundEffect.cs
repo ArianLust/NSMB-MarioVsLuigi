@@ -1,5 +1,5 @@
 public enum SoundEffect : byte {
-    //CURRENT HIGHEST NUMBER: 119 (use 120 next)
+    //CURRENT HIGHEST NUMBER: 120 (use 121 next)
     //Enemy
     Enemy_Generic_Freeze = 0,
     Enemy_Generic_FreezeShatter = 1,
@@ -58,6 +58,7 @@ public enum SoundEffect : byte {
     Player_Voice_Pickup_Large = 116,
     Player_Voice_Throw_Small = 117,
     Player_Voice_Throw_Large = 118,
+    Player_Voice_Taunt = 120,
 
     //Powerup
     Powerup_1UP_Collect = 78,
@@ -113,7 +114,7 @@ public enum SoundEffect : byte {
     //World Elements
     World_Block_Break = 67,
     World_Block_Bump = 68,
-    World_Block_Powerup = 69,
+    World_Block_Powerup = 69, // Nice
     World_Block_Powerup_Mega = 99,
     World_Coin_Collect = 70,
     World_Coin_Drop = 91,

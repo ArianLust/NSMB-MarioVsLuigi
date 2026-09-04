@@ -1,5 +1,5 @@
 using NSMB.Networking;
-using NSMB.Utilities;
+using NSMB.Utilities.Extensions;
 using Photon.Realtime;
 using System.Collections.Generic;
 using TMPro;

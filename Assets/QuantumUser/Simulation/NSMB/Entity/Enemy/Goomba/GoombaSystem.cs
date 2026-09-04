@@ -70,10 +70,11 @@ namespace Quantum {
             FPVector2 damageDirection = (theirPos - ourPos).Normalized;
             bool attackedFromAbove = FPVector2.Dot(damageDirection, FPVector2.Up) > FP._0_25;
 
-            bool groundpounded = attackedFromAbove && mario->IsGroundpoundActive && mario->CurrentPowerupState != PowerupState.MiniMushroom;
-            if (mario->InstakillsEnemies(marioPhysicsObject, true) || groundpounded) {
+            bool instakills = mario->InstakillsEnemies(marioPhysicsObject, true);
+            bool groundpounded = !instakills && attackedFromAbove && mario->IsGroundpoundActive && mario->CurrentPowerupState != PowerupState.MiniMushroom;
+            if (instakills || groundpounded) {
                 goomba->Kill(f, goombaEntity, marioEntity, groundpounded ? EnemyKillReason.Groundpounded : EnemyKillReason.Special);
-                mario->DoEntityBounce |= mario->IsDrilling;
+                mario->DoEntityBounce |= !instakills && mario->IsDrilling;
                 return;
             }
 
@@ -95,7 +96,7 @@ namespace Quantum {
                 marioPhysicsObject->Velocity.X = 0;
                 goombaEnemy->ChangeFacingRight(f, goombaEntity, ourPos.X > theirPos.X);
 
-            } else if (mario->IsDamageable && goombaEnemy->IntangibilityFrames == 0) {
+            } else if (mario->IsDamageable(f) && goombaEnemy->IntangibilityFrames == 0) {
                 mario->Powerdown(f, marioEntity, false, goombaEntity);
                 goombaEnemy->ChangeFacingRight(f, goombaEntity, damageDirection.X > 0);
             }

@@ -1,11 +1,12 @@
+using JimmysUnityUtilities;
 using UnityEngine;
 
 namespace NSMB.UI.Elements {
     [ExecuteAlways, RequireComponent(typeof(RectTransform))]
     public class ScaleWithParent : MonoBehaviour {
 
-        //---Serialized Variables
-        [SerializeField] private float targetWidth = 1000, aspectRatio = (16f/9f);
+        //---Public Variables
+        public float targetWidth = 1000, aspectRatio = (16f/9f);
 
         //---Private Variables
         private DrivenRectTransformTracker tracker;
@@ -13,7 +14,6 @@ namespace NSMB.UI.Elements {
     private int width, height;
 #endif
 
-#if UNITY_EDITOR
         public void OnValidate() {
             ValidationUtility.SafeOnValidate(() => {
                 if (!this) {
@@ -22,7 +22,6 @@ namespace NSMB.UI.Elements {
                 OnRectTransformDimensionsChange();
             });
         }
-#endif
 
         public void OnEnable() {
             tracker.Add(this, (RectTransform) transform, DrivenTransformProperties.Scale | DrivenTransformProperties.Anchors | DrivenTransformProperties.SizeDelta | DrivenTransformProperties.AnchoredPosition);
@@ -34,27 +33,27 @@ namespace NSMB.UI.Elements {
         }
 
 #if BROKEN_VERSION
-    public void LateUpdate() {
-        if (Screen.width != width || Screen.height != height) {
-            OnRectTransformDimensionsChange();
-            width = Screen.width;
-            height = Screen.height;
+        public void LateUpdate() {
+            if (Screen.width != width || Screen.height != height) {
+                OnRectTransformDimensionsChange();
+                width = Screen.width;
+                height = Screen.height;
+            }
+
+            Transform tf = transform;
+            do {
+                if (tf.hasChanged) {
+                    Debug.Log("tf has changed; " + tf.name);
+                    OnRectTransformDimensionsChange();
+                    tf.hasChanged = false;
+                    break;
+                }
+            } while (tf = tf.parent);
         }
 
-        Transform tf = transform;
-        do {
-            if (tf.hasChanged) {
-                Debug.Log("tf has changed; " + tf.name);
-                OnRectTransformDimensionsChange();
-                tf.hasChanged = false;
-                break;
-            }
-        } while (tf = tf.parent);
-    }
-
-    public void OnTransformParentChanged() {
-        OnRectTransformDimensionsChange();
-    }
+        public void OnTransformParentChanged() {
+            OnRectTransformDimensionsChange();
+        }
 #else
         public void LateUpdate() {
             // I can't get this shit to work... it SHOULD only

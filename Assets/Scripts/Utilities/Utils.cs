@@ -9,11 +9,22 @@ using UnityEngine;
 namespace NSMB.Utilities {
     public static class Utils {
 
+        public static T IndexIntoOrDefault<T>(IReadOnlyList<T> list, int index, T def) {
+            if (index < 0 || index >= list.Count) {
+                return def;
+            }
+            return list[index];
+        }
+
         public static T IndexIntoOrDefault<T>(IList<T> list, int index, T def) {
             if (index < 0 || index >= list.Count) {
                 return def;
             }
             return list[index];
+        }
+
+        public static T IndexIntoOrDefault<T>(List<T> list, int index, T def) {
+            return IndexIntoOrDefault((IList<T>) list, index, def);
         }
 
         public static bool BitTest(long v, int index) {
@@ -142,17 +153,25 @@ namespace NSMB.Utilities {
         };
 
         private static StringBuilder symbolStringBuilder = new();
-        public static string GetSymbolString(ReadOnlySpan<char> str, Dictionary<char, string> dict = null) {
+        public static string GetSymbolString(ReadOnlySpan<char> str, Dictionary<char, string> dict = null, int padUpToNLength = 0, bool tint = true) {
             dict ??= uiSymbols;
 
             symbolStringBuilder.Clear();
             foreach (char c in str) {
                 if (dict.TryGetValue(c, out string name)) {
-                    symbolStringBuilder.Append("<sprite name=").Append(name).Append('>');
+                    symbolStringBuilder.Append("<sprite ");
+                    if (tint) {
+                        symbolStringBuilder.Append("tint=1 ");
+                    }
+                    symbolStringBuilder.Append("name=").Append(name).Append('>');
                 } else {
                     symbolStringBuilder.Append(c);
                 }
             }
+            for (int i = str.Length; i < padUpToNLength; i++) {
+                symbolStringBuilder.Append("<space=0.5em><size=0>.</size>"); // invisible character suffix because if <SPACE> is at the end of the text, the component would trim it.
+            }
+            
             return symbolStringBuilder.ToString();
         }
 
@@ -261,7 +280,7 @@ namespace NSMB.Utilities {
             return Color.HSVToRGB(hue, saturation * s, value * v);
         }
 
-        public static string ColorToHex(Color32 color, bool includeAlpha) {
+        public static string ColorToHex(Color32 color, bool includeAlpha = false) {
             StringBuilder builder = new(8);
             builder.Append(Convert.ToString(color.r, 16).PadLeft(2, '0'));
             builder.Append(Convert.ToString(color.g, 16).PadLeft(2, '0'));
@@ -328,6 +347,14 @@ namespace NSMB.Utilities {
         /// <returns></returns>
         public static float Luminance(Color color) {
             return 0.2126f * color.r + 0.7152f * color.g + 0.0722f * color.b;
+        }
+
+        public static bool Blink(float timer, float blinksPerSecond, float? blinkStartTime = null) {
+            if (blinkStartTime.HasValue && timer > blinkStartTime.Value) {
+                return true;
+            }
+
+            return timer % (1f / blinksPerSecond) < (0.5f / blinksPerSecond);
         }
     }
 }

@@ -1,5 +1,5 @@
 using NSMB.UI.Translation;
-using NSMB.Utilities;
+using NSMB.Utilities.Extensions;
 using Quantum;
 using System;
 using System.Collections.Generic;
@@ -22,9 +22,10 @@ namespace NSMB.Chat {
         public readonly HashSet<string> mutedPlayers = new();
 
         //---Private Variables
+        private StageChooseMode currentMapChooseMode;
         private AssetRef<Map> currentMap;
         private AssetRef<GamemodeAsset> currentGamemode;
-        private ChatMessageData changeMapMessage, changeGamemodeMessage;
+        private ChatMessageData changeMapMessage, changeGamemodeMessage, assignTeamMessage, randomizeTeamMessage;
 
         public void Awake() {
             Instance = this;
@@ -49,6 +50,7 @@ namespace NSMB.Chat {
             QuantumEvent.Subscribe<EventPlayerKickedFromRoom>(this, OnPlayerKickedFromRoom, FilterOutReplay);
             QuantumEvent.Subscribe<EventPlayerUnbanned>(this, OnPlayerUnbanned, FilterOutReplay);
             QuantumEvent.Subscribe<EventPlayerTeamChangedByHost>(this, OnPlayerTeamChangedByHost, FilterOutReplay);
+            QuantumEvent.Subscribe<EventPlayerTeamRandomized>(this, OnPlayerTeamRandomized, FilterOutReplay);
         }
 
         private void OnUpdateView(CallbackUpdateView e) {
@@ -67,17 +69,24 @@ namespace NSMB.Chat {
                 changeGamemodeMessage = AddSystemMessage("ui.inroom.chat.server.gamemode", Red, "gamemode", gamemodeName);
                 currentGamemode = rules.Gamemode;
             }
-            if (rules.Stage != currentMap) {
+            if (rules.Stage != currentMap || rules.ChooseMode != currentMapChooseMode) {
                 RemoveChatMessage(changeMapMessage);
+
                 string stageName;
-                if (f.TryFindAsset(rules.Stage, out Map map)
-                    && f.TryFindAsset(map.UserAsset, out VersusStageData stageData)) {
-                    stageName = tm.GetTranslation(stageData.TranslationKey);
+                if (rules.ChooseMode == StageChooseMode.Random) {
+                    stageName = tm.GetTranslation("ui.inroom.settings.game.mapchoosemode.random");
                 } else {
-                    stageName = "???";
+                    if (f.TryFindAsset(rules.Stage, out Map map)
+                        && f.TryFindAsset(map.UserAsset, out VersusStageData stageData)) {
+                        stageName = tm.GetTranslation(stageData.TranslationKey);
+                    } else {
+                        stageName = "???";
+                    }
                 }
+
                 changeMapMessage = AddSystemMessage("ui.inroom.chat.server.map", Red, "map", stageName);
                 currentMap = rules.Stage;
+                currentMapChooseMode = rules.ChooseMode;
             }
         }
 
@@ -197,15 +206,29 @@ namespace NSMB.Chat {
         }
 
         private void OnPlayerTeamChangedByHost(EventPlayerTeamChangedByHost e) {
-            if (e.Game.PlayerIsLocal(e.Player)) {
+            if (!e.Game.PlayerIsLocal(e.Player)) {
+                return;
+            }
+
+            RemoveChatMessage(assignTeamMessage);
+            if (e.Clear) {
+                assignTeamMessage = AddSystemMessage("ui.inroom.chat.player.changeteam.unlocked", Blue);
+            } else {
                 Frame f = e.Game.Frames.Predicted;
                 var teams = f.Context.GetAllAssets<TeamAsset>();
-                if (e.Team < teams.Count) {
-                    AddSystemMessage("ui.inroom.chat.player.changeteam", Blue, "team", teams[e.Team].nameTranslationKey);
-                } else {
-                    AddSystemMessage("ui.inroom.chat.player.changeteam.unlocked", Blue);
-                }
+                assignTeamMessage = AddSystemMessage("ui.inroom.chat.player.changeteam", Blue, "team", teams[e.Team].nameTranslationKey);
             }
+        }
+
+        private void OnPlayerTeamRandomized(EventPlayerTeamRandomized e) {
+            if (!e.Game.PlayerIsLocal(e.Player)) {
+                return;
+            }
+
+            RemoveChatMessage(randomizeTeamMessage);
+            Frame f = e.Game.Frames.Predicted;
+            var teams = f.Context.GetAllAssets<TeamAsset>();
+            randomizeTeamMessage = AddSystemMessage("ui.inroom.chat.player.randomizeteam", Blue, "team", teams[e.Team].nameTranslationKey);
         }
     }
 }

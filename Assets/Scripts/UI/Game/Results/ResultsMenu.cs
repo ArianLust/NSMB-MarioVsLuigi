@@ -1,5 +1,4 @@
 using NSMB.Replay;
-using NSMB.UI.MainMenu;
 using NSMB.UI.MainMenu.Submenus.Replays;
 using NSMB.UI.Translation;
 using NSMB.Utilities.Extensions;
@@ -155,7 +154,7 @@ namespace NSMB.UI.Game.Results {
 
         public void Select(int index) {
             Deselect(index);
-            labels[index].text = "» " + labels[index].text;
+            labels[index].text = "Â» " + labels[index].text;
             labels[index].color = labelSelectedColor;
         }
 
@@ -186,7 +185,7 @@ namespace NSMB.UI.Game.Results {
                         _ = replayManager.CreateReplayListEntries(default, newReplay);
                         ActiveReplayManager.Instance.StartReplayPlayback(newReplay);
                     } else {
-                        labels[0].text = "» " + GlobalController.Instance.translationManager.GetTranslation("ui.game.results.nextreplay.nomore");
+                        labels[0].text = "Â» " + GlobalController.Instance.translationManager.GetTranslation("ui.game.results.nextreplay.nomore");
                         sfx.PlayOneShot(SoundEffect.UI_Error);
                         if (noReplaysCoroutine != null) {
                             StopCoroutine(noReplaysCoroutine);
@@ -222,9 +221,12 @@ namespace NSMB.UI.Game.Results {
             case 2:
                 if (exitPrompt) {
                     QuantumRunner.Default.Shutdown();
+                    if (GlobalController.Instance.bootedWithReplayArg) {
+                        Application.Quit();
+                    }
                 } else {
                     exitPrompt = true;
-                    labels[2].text = "» " + GlobalController.Instance.translationManager.GetTranslation(exitPrompt ? "ui.generic.confirmation" : "ui.game.results.quittomainmenu");
+                    labels[2].text = "Â» " + GlobalController.Instance.translationManager.GetTranslation(exitPrompt ? "ui.generic.confirmation" : "ui.game.results.quittomainmenu");
                 }
                 sfx.PlayOneShot(SoundEffect.UI_Decide);
                 break;

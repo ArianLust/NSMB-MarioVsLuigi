@@ -9,8 +9,6 @@ namespace Quantum {
 
             // Remove the default systems
             systems.Clear();
-
-            systems.Add(new EntityPrototypeSystem());
             systems.Add(new PlayerConnectedSystem());
             systems.Add(new MvLCullingSystem());
             systems.Add(new GameLogicSystem());
@@ -23,9 +21,9 @@ namespace Quantum {
                     new DonutBlockSystem(),
                     new MovingPlatformPhysicsQuerySystem(),
                     new PhysicsSystem2D(),
-                    new MovingPlatformSystem(),
                     new EnemySystem(),
                     new InteractionSystem(),
+                    new MovingPlatformSystem(),
                     new PhysicsObjectSystem(),
                     new GoombaSystem(),
                     new KoopaSystem(),
@@ -34,6 +32,7 @@ namespace Quantum {
                     new BulletBillLauncherSystem(),
                     new BulletBillSystem(),
                     new BooSystem(),
+                    new FireSnakeSystem(),
                     new ProjectileSystem(),
                     new CoinItemSystem(),
                     new PowerupSystem(),
@@ -56,6 +55,7 @@ namespace Quantum {
                 )
             );
             systems.Add(new StageSystem());
+            systems.Add(new EntityPrototypeSystem());
 
             if (!gameConfig.IsRealGame) {
                 var debugSystem = DebugCommand.CreateSystem();

@@ -1,4 +1,5 @@
 using Photon.Deterministic;
+using Quantum.Profiling;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -39,6 +40,7 @@ namespace Quantum {
                 }
 #else
                 if (f.GetPlayerCommand(player) is ILobbyCommand lobbyCommand) {
+                    using var profiler = HostProfiler.Start("ILobbyCommand.Execute");
                     var playerData = QuantumUtils.GetPlayerData(f, player, playerDataDictionary);
                     if (playerData == null) {
                         break;
@@ -48,24 +50,59 @@ namespace Quantum {
 #endif
             }
 
-            // Gaem state logic
+            // Game state logic
             switch (f.Global->GameState) {
             case GameState.PreGameRoom:
                 if (f.Global->GameStartFrames > 0) {
+                    if (!QuantumUtils.IsGameStartable(f)) {
+                        StopCountdown(f);
+                        break;
+                    }
+
                     if (QuantumUtils.Decrement(ref f.Global->GameStartFrames)) {
                         // Start the game!
                         if (f.IsVerified) {
-                            f.MapAssetRef = f.Global->Rules.Stage;
+                            AssetRef<Map> nextStage;
+
+                            switch (f.Global->Rules.ChooseMode) {
+                            case StageChooseMode.Choose:
+                                nextStage = f.Global->Rules.Stage;
+                                break;
+                            case StageChooseMode.Random: {
+                                // Pick a random map
+                                var allMaps = f.Context.GetAllAssets<Map>().ToList();
+
+                                // Exclude disabled maps.
+                                if (f.TryResolveHashSet(f.Global->Rules.RandomDisabledStages, out var disabledStages)) {
+                                    allMaps.RemoveAll(map => disabledStages.Contains(map));
+                                }
+
+                                // Remove the previous map (if possible)
+                                if (allMaps.Count > 1 && f.TryFindAsset(f.Global->PreviousStage, out Map previousStageMap)) {
+                                    allMaps.Remove(previousStageMap);
+                                }
+
+                                nextStage = allMaps[f.RNG->Next(0, allMaps.Count)];
+                                break;
+                            }
+                            default:
+                                throw new ArgumentOutOfRangeException($"Unknown StageChooseMode {f.Global->Rules.ChooseMode}");
+                            }
+
+                            f.MapAssetRef = nextStage;
                         }
+
                         f.Global->PlayerLoadFrames = (ushort) (20 * f.UpdateRate);
                         f.Global->GameState = GameState.WaitingForPlayers;
+                        f.Global->IsStartGameCountdownActive = false;
 
                         f.Events.GameStateChanged(GameState.WaitingForPlayers);
-                    } else if (f.Global->GameStartFrames % 60 == 0) {
-                        f.Events.CountdownTick(f.Global->GameStartFrames / 60);
+                    } else if (f.Global->GameStartFrames > 0 && f.Global->GameStartFrames % f.UpdateRate == 0) {
+                        f.Events.CountdownTick(f.Global->GameStartFrames / f.UpdateRate);
                     }
                 }
                 break;
+
             case GameState.WaitingForPlayers:
                 int validPlayers = 0;
                 int loadedPlayers = 0;
@@ -100,6 +137,7 @@ namespace Quantum {
                     f.Events.GameStateChanged(GameState.Starting);
                 }
                 break;
+
             case GameState.Starting:
                 if (QuantumUtils.Decrement(ref f.Global->GameStartFrames)) {
                     // Now playing
@@ -130,7 +168,7 @@ namespace Quantum {
                     f.Events.GameStarted();
                 }
                 break;
-
+            
             case GameState.Playing:
                 if (f.Global->Rules.TimerMinutes > 0 && f.Global->Timer > 0) {
                     if ((f.Global->Timer -= f.DeltaTime) <= 0) {
@@ -171,7 +209,7 @@ namespace Quantum {
                     // Move back to lobby.
                     f.Global->TotalGamesPlayed++;
                     if (f.IsVerified) {
-                        //f.MapAssetRef = f.SimulationConfig.LobbyMap;
+                        f.Global->PreviousStage = f.MapAssetRef;
                         f.Map = null;
                     }
                     f.SystemEnable<StartDisabledSystemGroup>();
@@ -179,9 +217,6 @@ namespace Quantum {
                     f.Global->GameState = GameState.PreGameRoom;
                     f.Events.GameStateChanged(GameState.PreGameRoom);
                     f.SystemDisable<StartDisabledSystemGroup>();
-
-                    var gamemode = f.FindAsset(f.Global->Rules.Gamemode);
-                    gamemode.DisableGamemode(f);
                 }
                 break;
             }
@@ -189,6 +224,7 @@ namespace Quantum {
 
         public static void StopCountdown(Frame f) {
             f.Global->GameStartFrames = 0;
+            f.Global->IsStartGameCountdownActive = false;
             f.Events.StartingCountdownChanged(false);
         }
 
@@ -274,11 +310,7 @@ namespace Quantum {
 
             if (playerDatas.Count == 0) {
                 // First player is host
-                newData->IsRoomHost = true;
-                newData->IsReady = false;
-                newData->IsTeamLocked = false;
-                f.Global->Host = player;
-                f.Events.HostChanged(player);
+                newData->SetAsHost(f, true);
             }
 
             foreach ((_, EntityRef otherEntity) in playerDatas) {
@@ -307,7 +339,7 @@ namespace Quantum {
             if (playerDatas.TryGetValue(player, out EntityRef entity)
                 && f.Unsafe.TryGetPointer(entity, out PlayerData* deletedPlayerData)) {
 
-                if (deletedPlayerData->IsRoomHost) {
+                if (deletedPlayerData->IsRoomHost(f)) {
                     // Give the host to the youngest player.
                     PlayerData* youngestPlayer = null;
                     foreach ((_, EntityRef otherEntity) in playerDatas) {
@@ -322,11 +354,7 @@ namespace Quantum {
                     }
 
                     if (youngestPlayer != null) {
-                        youngestPlayer->IsRoomHost = true;
-                        youngestPlayer->IsReady = false;
-                        youngestPlayer->IsTeamLocked = false;
-                        f.Global->Host = youngestPlayer->PlayerRef;
-                        f.Events.HostChanged(youngestPlayer->PlayerRef);
+                        youngestPlayer->SetAsHost(f, true);
                     }
 
                     hostChanged = true;
@@ -372,9 +400,9 @@ namespace Quantum {
             // Spawn players
             var config = f.SimulationConfig;
             var stage = f.FindAsset<VersusStageData>(f.Map.UserAsset);
-            int teamCount = 0;
 
-            int playerCount = 0;
+            var activePlayerDatas = stackalloc PlayerData*[f.ComponentCount<PlayerData>()];
+            int activePlayerCount = 0;
             foreach ((_, var data) in f.Unsafe.GetComponentBlockIterator<PlayerData>()) {
                 if (!data->IsLoaded) {
                     // Force spectator, didn't load in time
@@ -386,6 +414,13 @@ namespace Quantum {
                     continue;
                 }
 
+                activePlayerDatas[activePlayerCount++] = data;
+            }
+            SortByJoinTick(activePlayerDatas, activePlayerCount);
+
+            int teamCount = 0;
+            for (int i = 0; i < activePlayerCount; i++) {
+                var data = activePlayerDatas[i];
                 if (!f.TryFindAsset(data->Character, out var character)) {
                     character = f.Context.GetAllAssets<CharacterAsset>()[0];
                 }
@@ -401,11 +436,11 @@ namespace Quantum {
 
                 // Save runtimeplayer info for late joiners, in case this player DCs
                 RuntimePlayer runtimePlayer = f.GetPlayerData(data->PlayerRef);
-                f.Global->PlayerInfo[playerCount++] = new PlayerInformation {
+                f.Global->PlayerInfo[i] = new PlayerInformation {
                     PlayerRef = data->PlayerRef,
                     Nickname = runtimePlayer.PlayerNickname,
                     NicknameColor = runtimePlayer.NicknameColor,
-                    Character = runtimePlayer.Character,
+                    Character = data->Character,
                     Team = data->RealTeam,
                 };
             }
@@ -441,7 +476,6 @@ namespace Quantum {
             for (int i = 0; i < f.Global->PlayerInfo.Length; i++) {
                 f.Global->PlayerInfo[i] = default;
             }
-            f.Global->UsedStarSpawns.ClearAll();
 
             foreach ((_, var data) in f.Unsafe.GetComponentBlockIterator<PlayerData>()) {
                 data->IsLoaded = false;
@@ -450,6 +484,8 @@ namespace Quantum {
                 data->VotedToContinue = false;
                 data->RealTeam = 255;
             }
+
+            f.FindAsset(f.Global->Rules.Gamemode).OnReturnToRoom(f);
         }
 
         public void OnRemoved(Frame f, EntityRef entity, MarioPlayer* component) {
@@ -461,6 +497,18 @@ namespace Quantum {
 
                 info.Disqualified = true;
                 break;
+            }
+        }
+
+        private static void SortByJoinTick(PlayerData** span, int count) {
+            for (int i = 1; i < count; i++) {
+                var key = span[i];
+                int j = i - 1;
+                while (j >= 0 && span[j]->JoinTick > key->JoinTick) {
+                    span[j + 1] = span[j];
+                    j--;
+                }
+                span[j + 1] = key;
             }
         }
     }

@@ -2,6 +2,7 @@ using JimmysUnityUtilities;
 using NSMB.Chat;
 using NSMB.UI.Elements;
 using NSMB.Utilities;
+using NSMB.Utilities.Extensions;
 using Quantum;
 using System;
 using System.Collections.Generic;
@@ -95,7 +96,8 @@ namespace NSMB.UI.MainMenu.Submenus.InRoom {
             } else {
                 chattingIcon.SetActive(false);
                 typingCounter = 0;
-            };
+            }
+            ;
         }
 
         public unsafe void SetPlayer(Frame f, PlayerRef player) {
@@ -154,7 +156,7 @@ namespace NSMB.UI.MainMenu.Submenus.InRoom {
                 builder.Append("<sprite name=player_muted>");
             }
 
-            if (playerData->IsRoomHost) {
+            if (playerData->IsRoomHost(f)) {
                 builder.Append("<sprite name=room_host>");
             }
 
